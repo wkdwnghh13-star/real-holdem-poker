@@ -1,31 +1,46 @@
-# 🃏 REAL HOLDEM POKER — 리얼 홀덤 포커
+# 🃏 REAL HOLDEM POKER — 리얼 홀덤 포커 (NEON ARCADE v1.0.1)
 
-실사풍 텍사스 홀덤(No-Limit Hold'em) 모바일 게임. **HTML5 + Canvas/CSS 3D**, **Capacitor Android**, **GitHub Actions 원클릭 APK/AAB 빌드**.
+네온 아케이드 스타일 텍사스 홀덤(No-Limit Hold'em) 모바일 게임. **HTML5 + Canvas/CSS 3D**, **Capacitor Android**, **GitHub Actions 원클릭 APK/AAB 빌드**.
 세로 9:16 모바일과 갤럭시 Z Fold7(펼친 화면)까지 대응.
+
+## v1.0.1 (NEON ARCADE) 추가 기능
+
+- **네온 아케이드 비주얼**: 어두운 사이버 카지노 + 시안(#00f5ff)·마젠타(#ff2bd6) 듀얼 네온 테이블 림, 두툼한 아케이드 액션 버튼, 네온 족보 배너. 로그인·로비·상점·튜토리얼·운영자 패널까지 전 화면 통일.
+- **플랍/턴/리버 번개**: 캔버스 분기 번개(단계별 강도 1/2/3) + Web Audio 합성 크랙클·천둥 + 진동 + 림 플래시 + 화면 임팩트. `js/lightning.js`
+- **움직이는 여성 딜러 10종**: 상시 호흡·좌우 sway·네온 림 펄스, 딜링 시 앞으로 기우는 모션과 카드 궤적 트레일, ALL-IN·큰 족보에 환호 리액션. (랜덤 배치 유지)
+- **계정 시스템**: 회원가입 / 로그인 / 게스트 체험 / 로그아웃. 계정별 진행도·스킨·영수증을 localStorage에 분리 저장. `js/auth.js`
+- **운영자 모드**: `admin / 7073` 또는 `juho / 7073`로 로그인하면 상단·메뉴에 운영자 토글 자동 활성화. 플레이어 정보 조회(닉네임·칩·전적·VIP·현재 손패/족보) + 칩 지급/차감. 일반 계정에는 AI/등급 표시가 전혀 노출되지 않음(운영자만 `AI · 등급` / `실제 유저` 배지).
+- **모드**: 캐시게임 · 헤즈업 1:1(버튼=SB) · 랭크겜(LP 7티어 + 리더보드) · 토너먼트(블라인드 업, 1~3등 상금, VIP 포인트) · 프로 관전 · 컬렉션 · 시즌패스.
+- **상점 BM**: 칩 현금 충전(1,100~55,000원, 첫 충전 +100%, `window.HoldemBilling` + 테스트 샌드박스/영수증), 테이블 펠트·네온 림·번개·카드 앞/뒷면·드랍·프로필 스킨, 승리/패배 연출, 부스터(2X WIN / BLIND ALL-IN / 플랍 2X 승부).
+- **시즌패스**: 10레벨 무료·프리미엄 라인, 패스 XP(핸드/승리/올인), 프리미엄 해금(11,000원 샌드박스).
+- **컬렉션 도감**: 스킨·여성 딜러 10명·족보 9종 수집률과 달성 보상.
 
 ```
 projects/holdem-poker/
 ├─ www/                    # 게임 본체 (웹 자산)
 │  ├─ index.html
-│  ├─ css/style.css        # 실사풍 카지노 UI · 카드 · 칩 · 이펙트 · 스킨
+│  ├─ css/style.css        # 네온 아케이드 UI · 카드 · 칩 · 스킨 · 모달
 │  ├─ js/
 │  │  ├─ poker-engine.js   # 홀덤 엔진 (7장 최고5장, 사이드팟, 스플릿팟)
 │  │  ├─ ai.js             # 4등급 AI (뉴비/초보/고수/프로) + 익스플로잇
 │  │  ├─ cards.js          # 카드/칩 그래픽 (페이퍼 질감, 코트 카드, 스킨)
-│  │  ├─ effects.js        # 캔버스 파티클 · 족보 배너 · 칩 샤워
-│  │  ├─ audio.js          # WebAudio 합성 사운드 + 로파이 BGM + 진동
+│  │  ├─ effects.js        # 캔버스 파티클 · 족보/스트리트 배너 · 칩 샤워
+│  │  ├─ lightning.js      # 플랍/턴/리버 네온 번개 엔진
+│  │  ├─ audio.js          # WebAudio 합성 사운드 + 번개/천둥 + 로파이 BGM + 진동
 │  │  ├─ dealers.js        # 여성 딜러 10종 (200×200 JPEG · base64 내장)
-│  │  ├─ progress.js       # 뱅크롤 · VIP · 스킨 · 칭호 · 통계
+│  │  ├─ progress.js       # 뱅크롤 · VIP · 랭크 · 패스 · 컬렉션 · 스킨
+│  │  ├─ auth.js           # 회원가입/로그인/게스트 · 운영자 계정 · 계정별 저장
+│  │  ├─ billing.js        # window.HoldemBilling (칩 충전·시즌패스 결제 훅)
 │  │  ├─ game.js           # 게임 러너 (턴 진행 · AI 템포 · 휴먼 대기)
 │  │  ├─ net.js            # 전송 계층 (BroadcastChannel / PeerJS / WebSocket)
 │  │  ├─ mp.js             # 멀티플레이 세션 (호스트 권한 모델)
 │  │  ├─ table.js          # 스냅샷 렌더러 (좌석 · 카드 플립 · 스퀴즈)
 │  │  ├─ tutorial.js       # 초보자 튜토리얼 (스킵 가능)
-│  │  └─ main.js           # 앱 컨트롤러 (로비 · GM · 설정)
+│  │  └─ main.js           # 앱 컨트롤러 (인증 · 로비 · 모드 · 상점 · GM)
 │  ├─ vendor/peerjs.min.js # WebRTC P2P
 │  └─ ...
-├─ server/relay.js         # 의존성 없는 초경량 WebSocket 릴레이
-├─ tools/                  # E2E/엔진 검증 스크립트(bundle.py = 단일 HTML 번들), 서명 패치
+├─ server/relay.js         # 의존성 없는 초경량 WebSocket 릴레이 (+ 계정 명부 동기화)
+├─ tools/                  # E2E/엔진 검증(bundle.py = 단일 HTML 번들, v6_check.py = 전체 E2E)
 ├─ .github/workflows/build-android.yml
 ├─ capacitor.config.json   # appId com.juho.holdempoker
 └─ package.json

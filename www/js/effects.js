@@ -224,6 +224,19 @@
       }, opts.duration || this.bannerDuration || 2400);
     },
 
+    /* 스트리트 배너 — 플랍/턴/리버가 깔릴 때 테이블 위에 네온 라벨 */
+    streetBanner(label, level) {
+      const host = document.getElementById('table-area');
+      if (!host) return;
+      Array.prototype.slice.call(host.querySelectorAll('.street-banner')).forEach(function (b) { b.remove(); });
+      const el = document.createElement('div');
+      el.className = 'street-banner lv' + (level || 1);
+      el.innerHTML = '<span class="sb-zap">⚡</span><span class="sb-txt">' + label + '</span>';
+      host.appendChild(el);
+      requestAnimationFrame(function () { el.classList.add('on'); });
+      setTimeout(function () { el.remove(); }, 1400);
+    },
+
     /* 카드 요소에 금빛 스윕 + 스파크 */
     cardReveal(cardEl, color) {
       if (!cardEl) return;

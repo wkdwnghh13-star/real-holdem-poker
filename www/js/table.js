@@ -103,7 +103,7 @@
     prev: null,
     seatCount: 0,
     you: 0,
-    skins: { card: 'classic', felt: 'emerald' },
+    skins: { card: 'classic', felt: 'emerald', rim: 'cyan', fx: 'bolt_cyan', face: 'face_classic', drop: 'drop_basic' },
     heroRevealed: false,
     handFxDone: 0,
     cardEls: [],
@@ -113,8 +113,13 @@
       this.el = dom;
       this.skins.card = (opts && opts.cardSkin) || 'classic';
       this.skins.felt = (opts && opts.feltSkin) || 'emerald';
+      this.skins.rim = (opts && opts.rimSkin) || 'cyan';
+      this.skins.fx = (opts && opts.fxSkin) || 'bolt_cyan';
+      this.skins.face = (opts && opts.faceSkin) || 'face_classic';
+      this.skins.drop = (opts && opts.dropSkin) || 'drop_basic';
       const self = this;
       if (dom.fxCanvas) global.FX.init(dom.fxCanvas, dom.fxLayer);
+      if (dom.boltCanvas && global.Lightning) global.Lightning.init(dom.boltCanvas, dom.impactLayer);
       this.applySkins();
       if (dom.heroCards) {
         dom.heroCards.addEventListener('pointerdown', function (e) { self.startPeek(e); });
@@ -133,7 +138,28 @@
       const t = this.el.tableArea;
       if (!t) return;
       t.dataset.felt = this.skins.felt;
+      t.dataset.rim = this.skins.rim;
       document.documentElement.dataset.cardSkin = this.skins.card;
+      document.documentElement.dataset.cardFace = this.skins.face;
+      if (global.Lightning) global.Lightning.setTheme(this.skins.fx);
+    },
+
+    /* 카드가 테이블에 떨어질 때 드랍 이펙트 스킨 */
+    dropFx(el) {
+      if (!el || !global.FX) return;
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const list = global.DROP_SKINS || [];
+      const s = list.filter(function (x) { return x.id === View.skins.drop; })[0] || { a: '#ffe9a8', b: '#ffd166' };
+      if (View.skins.drop === 'drop_bolt') {
+        global.FX.spark(cx, cy, 14, { speed: 3.2, size: 2.2, colors: [s.a, s.b, '#ffffff'] });
+        global.FX.ring(cx, cy, 'rgba(0,245,255,0.65)', r.width * 0.5);
+      } else if (View.skins.drop === 'drop_gold') {
+        global.FX.spark(cx, cy, 16, { speed: 3, size: 2.2, colors: [s.a, s.b, '#fff6d8'] });
+        global.FX.coinShower(cx, cy - 10, r.width * 1.4, 6);
+      } else {
+        global.FX.spark(cx, cy, 7, { speed: 2, size: 1.7, colors: [s.a, s.b] });
+      }
     },
 
     /* ------------------------------------------------------------ 딜러 */
@@ -141,6 +167,7 @@
     setDealer(d) {
       if (!d) return;
       this.dealer = d;
+      if (global.Progress) global.Progress.markDealerMet(d.id);
       const pic = document.getElementById('dealer-pic');
       const nm = document.getElementById('dealer-name');
       const box = document.getElementById('dealer');
@@ -154,9 +181,13 @@
       }
     },
 
-    setSkins(card, felt) {
+    setSkins(card, felt, rim, fx, face, drop) {
       if (card) this.skins.card = card;
       if (felt) this.skins.felt = felt;
+      if (rim) this.skins.rim = rim;
+      if (fx) this.skins.fx = fx;
+      if (face) this.skins.face = face;
+      if (drop) this.skins.drop = drop;
       this.applySkins();
       if (this.snap) this.render(this.snap, true);
     },
@@ -303,9 +334,17 @@
       stk.textContent = C.fmt(s.stack);
       av.textContent = (s.avatar || '');
       const g = s.grade || 'beginner';
-      grade.textContent = global.PokerAI.GRADE_KO[g] || '';
-      grade.className = 'grade g-' + g;
-      grade.style.display = s.isHero === false && g ? '' : (g ? '' : 'none');
+      /* AI/등급 배지는 운영자 모드(ON)에서만 보인다 — 일반 유저에게는 사람처럼 보이게 */
+      const gmOn = !!(global.App && global.App.gmUnlocked);
+      const isBot = !(s.isHero || s.remote || s.idx === this.you) && s.bot !== false;
+      if (gmOn) {
+        grade.textContent = isBot ? ('AI · ' + (global.PokerAI.GRADE_KO[g] || '초보')) : '실제 유저';
+        grade.className = 'grade ' + (isBot ? 'g-' + g : 'g-human');
+        grade.style.display = '';
+      } else {
+        grade.textContent = '';
+        grade.style.display = 'none';
+      }
       dbtn.classList.toggle('on', snap.dealer === idx);
 
       if (s.lastAction && s.inHand && !s.folded) {
@@ -521,7 +560,68 @@
       d.classList.remove('dealing');
       void d.offsetWidth;
       d.classList.add('dealing');
-      setTimeout(function () { d.classList.remove('dealing'); }, 680);
+      setTimeout(function () { d.classList.remove('dealing'); }, 640);
+    },
+
+    /* ALL-IN · 큰 족보에서 딜러가 환호하듯 튀어오르는 리액션 + 네온 아우라 */
+    dealerCheer(strength) {
+      const d = document.getElementById('dealer');
+      if (!d) return;
+      d.classList.remove('cheer');
+      void d.offsetWidth;
+      d.classList.add('cheer');
+      setTimeout(function () { d.classList.remove('cheer'); }, 1000);
+      const o = this.dealerPoint();
+      if (o && global.FX) {
+        const n = 14 + Math.round((strength || 1) * 8);
+        global.FX.spark(o.x, o.y, n, {
+          speed: 3.4, size: 2.2, colors: ['#ffffff', '#00f5ff', '#ff2bd6', '#b06bff']
+        });
+        global.FX.ring(o.x, o.y, 'rgba(255,43,214,0.85)', 34);
+      }
+    },
+
+    /* 플랍/턴/리버 번개 — 카드가 앉은 자리로 방전 */
+    strikeStreet(cardEl, level, quiet) {
+      if (!cardEl) return;
+      const r = cardEl.getBoundingClientRect();
+      if (!r.width) return;
+      const lv = Math.max(1, Math.min(3, level || 1));
+      const box = { x: r.left, y: r.top, w: r.width, h: r.height };
+      if (global.Lightning) global.Lightning.strike(lv, box);
+      if (global.Sound) global.Sound.bolt(lv, 0, quiet);
+      if (lv >= 2) this.rimFlash(lv);
+      if (lv >= 3) this.impactShake();
+      Haptic.fire(lv === 3 ? [55, 45, 100, 45, 190] : lv === 2 ? [28, 34, 74] : [12, 18, 26]);
+      if (global.FX) {
+        global.FX.spark(r.left + r.width / 2, r.top + r.height / 2, lv === 3 ? 26 : lv === 2 ? 18 : 12, {
+          speed: 2.4 + lv, size: 2,
+          colors: lv === 3 ? ['#ffffff', '#00f5ff', '#ff2bd6'] : ['#c8fdff', '#00f5ff', '#b06bff']
+        });
+        if (lv >= 2) {
+          global.FX.ring(r.left + r.width / 2, r.top + r.height / 2,
+            lv === 3 ? 'rgba(255,43,214,0.8)' : 'rgba(0,245,255,0.7)', r.width * (lv === 3 ? 0.6 : 0.4));
+        }
+      }
+    },
+
+    rimFlash(level) {
+      const rail = document.getElementById('table-rail');
+      if (!rail) return;
+      const cls = level >= 3 ? 'rim-3' : 'rim-2';
+      rail.classList.remove('rim-2', 'rim-3');
+      void rail.offsetWidth;
+      rail.classList.add(cls);
+      setTimeout(function () { rail.classList.remove(cls); }, level >= 3 ? 820 : 500);
+    },
+
+    impactShake() {
+      const a = this.el.tableArea;
+      if (!a) return;
+      a.classList.remove('impact-shake');
+      void a.offsetWidth;
+      a.classList.add('impact-shake');
+      setTimeout(function () { a.classList.remove('impact-shake'); }, 560);
     },
 
     /* 딜러 위치에서 대상 카드 자리로 뒷면 카드를 실제로 날려 보낸다 */
@@ -544,11 +644,18 @@
       const dx = (r.left + r.width / 2) - o.x;
       const dy = (r.top + r.height / 2) - o.y;
       const spin = (Math.random() * 12 - 6).toFixed(1);
+      /* 딜러 손끝의 네온 머즐 플레어 + 카드 궤적 트레일 */
+      const self = this;
+      setTimeout(function () {
+        self.dealFlare(o.x, o.y);
+        self.dealTrail(o.x, o.y, r.left + r.width / 2, r.top + r.height / 2);
+      }, delay || 0);
       let anim = null;
       try {
         anim = el.animate([
           { transform: 'translate(0px, 0px) rotate(-7deg) scale(1.05)' },
-          { transform: 'translate(' + (dx * 0.5).toFixed(1) + 'px,' + (dy * 0.5 - 24).toFixed(1) + 'px) rotate(' + spin + 'deg) scale(1.01)', offset: 0.6 },
+          { transform: 'translate(' + (dx * 0.42).toFixed(1) + 'px,' + (dy * 0.32 - 52).toFixed(1) + 'px) rotate(' + spin + 'deg) scale(1.03)', offset: 0.55 },
+          { transform: 'translate(' + (dx * 0.78).toFixed(1) + 'px,' + (dy * 0.82 - 12).toFixed(1) + 'px) rotate(0deg) scale(1.01)', offset: 0.85 },
           { transform: 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px) rotate(0deg) scale(1)' }
         ], { duration: dur, delay: delay, easing: 'cubic-bezier(.25,.75,.35,1)', fill: 'both' });
       } catch (e) {
@@ -560,6 +667,33 @@
       };
       anim.onfinish = done;
       anim.oncancel = done;
+    },
+
+    dealFlare(x, y) {
+      const layer = this.el.fxLayer;
+      if (!layer) return;
+      const el = document.createElement('div');
+      el.className = 'deal-flare';
+      el.style.left = x + 'px';
+      el.style.top = y + 'px';
+      layer.appendChild(el);
+      setTimeout(function () { el.remove(); }, 460);
+    },
+
+    dealTrail(x1, y1, x2, y2) {
+      const layer = this.el.fxLayer;
+      if (!layer) return;
+      const dx = x2 - x1, dy = y2 - y1;
+      const len = Math.hypot(dx, dy);
+      if (!len) return;
+      const el = document.createElement('div');
+      el.className = 'deal-trail ' + (this.skins.drop === 'drop_bolt' ? 'bolt' : this.skins.drop === 'drop_gold' ? 'gold' : '');
+      el.style.left = x1 + 'px';
+      el.style.top = y1 + 'px';
+      el.style.width = len.toFixed(1) + 'px';
+      el.style.transform = 'rotate(' + Math.atan2(dy, dx).toFixed(4) + 'rad)';
+      layer.appendChild(el);
+      setTimeout(function () { el.remove(); }, 460);
     },
 
     holeTarget(snap, seat, pass) {
@@ -626,6 +760,8 @@
       const slots = this.el.board.querySelectorAll('.board-slot');
       const self = this;
       const first = Math.max(0, snap.board.length - dealt);
+      const total = snap.board.length;      // 3 = 플랍, 4 = 턴, 5 = 리버
+      const level = total >= 5 ? 3 : total === 4 ? 2 : 1;
       this.dealerFlash();
       let d = 0;
       for (let i = first; i < snap.board.length; i++) {
@@ -634,15 +770,21 @@
         const cardEl = slot.querySelector('.card');
         if (!cardEl) continue;
         cardEl.classList.add('await');
-        (function (cc, delay) {
-          self.flyCard(cc, delay, 260, function () {
+        (function (cc, delay, idx) {
+          self.flyCard(cc, delay, level >= 3 ? 300 : 260, function () {
             cc.classList.remove('await');
             cc.classList.add('flip-in');
             Sound.deal();
             Sound.flip();
             global.FX.cardReveal(cc);
+            self.dropFx(cc);
+            /* 카드가 앉는 순간 번개 방전 (플랍/턴/리버 강도 차등) */
+            self.strikeStreet(cc, level, idx > 0);
+            if (idx === 0) {
+              global.FX.streetBanner(level >= 3 ? 'RIVER' : level === 2 ? 'TURN' : 'FLOP', level);
+            }
           });
-        })(cardEl, d * 130);
+        })(cardEl, d * (level >= 3 ? 150 : 130), d);
         d++;
       }
     },
@@ -706,6 +848,7 @@
       }
       const ev = P.evaluate(s.hole.concat(snap.board));
       if (!ev) return;
+      if (global.Progress) global.Progress.markCat(ev.cat);
       const key = snap.handNo + ':' + snap.board.length;
       if (this.handFxDone >= ev.cat && this._lastCatKey === key) return;
       this._lastCatKey = key;
@@ -720,6 +863,7 @@
         if (found) els.push(found);
       });
       global.FX.handComplete(els, catName);
+      if (ev.cat >= 4) this.dealerCheer(ev.cat >= 6 ? 2 : 1);
       if (ev.cat >= 3) {
         Haptic.fire([40, 40, 80]);
         Sound.fanfare();
@@ -746,6 +890,13 @@
       if (!res || !res.results) return;
       const winners = res.results.filter(function (r) { return r.amount > 0; });
       if (!winners.length) return;
+      /* 스트레이트 이상 큰 족보가 나오면 딜러도 함께 환호 */
+      const topCat = winners.reduce(function (m, w) {
+        if (!w.best5) return m;
+        const ev = P.evaluate(w.best5);
+        return ev && ev.cat > m ? ev.cat : m;
+      }, -1);
+      if (topCat >= 4) this.dealerCheer(topCat >= 6 ? 2 : 1);
       const best = winners.slice().sort(function (a, b) { return b.amount - a.amount; })[0];
       const youWon = winners.some(function (w) { return w.seat === snap.you; });
       const showdown = res.type === 'showdown';
@@ -786,6 +937,20 @@
       if (youWon) {
         Sound.win();
         if (showdown) Haptic.fire([40, 40, 80]);
+        const winFx = (global.Progress && global.Progress.data.winFx) || 'win_neon';
+        if (winFx === 'win_gold') {
+          global.FX.coinShower(global.innerWidth / 2, global.innerHeight * 0.5, global.innerWidth * 0.75, 44);
+          global.FX.starBurst(global.innerWidth / 2, global.innerHeight * 0.42, 18);
+        } else if (winFx === 'win_bolt') {
+          const bc = this.boardCenter();
+          if (global.Lightning) global.Lightning.strike(3, { x: bc.x - 30, y: bc.y - 20, w: 60, h: 40 });
+          global.FX.spark(bc.x, bc.y, 26, { speed: 4, colors: ['#ffffff', '#00f5ff', '#ff2bd6'] });
+          global.FX.ring(bc.x, bc.y, 'rgba(255,43,214,0.85)', 60);
+        } else {
+          global.FX.confettiBurst(global.innerWidth / 2, global.innerHeight * 0.38, 60);
+          global.FX.ring(global.innerWidth / 2, global.innerHeight * 0.45, 'rgba(0,245,255,0.85)', 50);
+          global.FX.spark(global.innerWidth / 2, global.innerHeight * 0.4, 18, { speed: 4, colors: ['#00f5ff', '#ff2bd6', '#ffffff'] });
+        }
         if (showdown && best.amount >= (this._bb || 20) * 4) {
           global.FX.coinShower(global.innerWidth / 2, global.innerHeight * 0.5, global.innerWidth * 0.7, 34);
         }
@@ -793,6 +958,15 @@
         if (hp) { hp.classList.add('win-flash'); setTimeout(function () { hp.classList.remove('win-flash'); }, 1400); }
       } else if (showdown) {
         Sound.lose(0.1);
+        const loseFx = (global.Progress && global.Progress.data.loseFx) || 'lose_glitch';
+        const sc = document.getElementById('screen-game');
+        if (sc) {
+          const cls = loseFx === 'lose_powerdown' ? 'power-down' : 'glitch-hit';
+          sc.classList.remove('glitch-hit', 'power-down');
+          void sc.offsetWidth;
+          sc.classList.add(cls);
+          setTimeout(function () { sc.classList.remove(cls); }, loseFx === 'lose_powerdown' ? 1100 : 700);
+        }
       }
       const winNode = this.el.seats.querySelector('.seat[data-idx="' + best.seat + '"]');
       if (winNode) winNode.classList.add('winner');
@@ -823,7 +997,13 @@
       else if (a === 'fold') Sound.fold();
       else if (a === 'call') Sound.chip(0, 2);
       else if (a === 'raise' || a === 'bet') { Sound.chip(0, 4); }
-      else if (a === 'allin') { Sound.allin(); if (node) global.FX.shake(node, 400); }
+      else if (a === 'allin') {
+        Sound.allin();
+        if (node) global.FX.shake(node, 400);
+        global.FX.banner('ALL-IN!', '', { cls: 'allin', duration: 1300 });
+        this.dealerCheer(2);
+      }
+      if (a === 'allin') Haptic.fire([50, 40, 90]);
       if (node && (a === 'raise' || a === 'allin' || a === 'bet')) {
         const b = node.querySelector('.badge');
         if (b) { b.classList.add('pop'); setTimeout(function () { b.classList.remove('pop'); }, 500); }

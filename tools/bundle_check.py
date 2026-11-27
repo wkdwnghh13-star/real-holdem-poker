@@ -18,6 +18,7 @@ async def main():
             page = await b.new_page(viewport={"width": w, "height": h}, device_scale_factor=2)
             page.on("pageerror", lambda e: errs.append("PAGEERROR: " + str(e)))
             page.on("console", lambda m: errs.append("CONSOLE: " + m.text) if m.type == "error" else None)
+            await page.add_init_script("localStorage.setItem('realholdem.session.v1', JSON.stringify({id:'admin', at:new Date().toISOString()}));")
             await page.goto("file://" + os.path.abspath(BUNDLE))
             await page.wait_for_timeout(3400)
             await page.evaluate("() => { Progress.data.tutorialDone = true; Progress.save(); }")
@@ -35,11 +36,8 @@ async def main():
               boardRows: !!document.querySelector('#gm-board'),
               flyCapable: typeof View.flyCard === 'function'
             })""")
-            # GM 토글
-            await page.evaluate("() => { const el = document.querySelector('#g-room'); for (let i=0;i<5;i++) el.click(); }")
-            await page.wait_for_selector("#modal-gm-pin.on", timeout=4000)
-            await page.fill("#gm-pin", "7073")
-            await page.click("#gm-pin-ok")
+            # GM 토글 (운영자 계정 자동 활성화)
+            await page.click("#btn-gm")
             await page.wait_for_selector("#modal-gm.on", timeout=4000)
             await page.click("#gm-peek")
             await page.click("#gm-board")

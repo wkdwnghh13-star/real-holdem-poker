@@ -645,6 +645,86 @@
       }
     },
 
+    /* ───────────────────── 네온 번개: 플랍/턴/리버 단계별 전기 스파크 ───── */
+    /* level 1 = 플랍(치지직), 2 = 턴(묵직한 임팩트), 3 = 리버(천둥 + 베이스 드롭) */
+    bolt(level, delay, quiet) {
+      if (!this.enabled) return;
+      this.init(); if (!this.ctx) return;
+      const ctx = this.ctx, master = this.master;
+      const t0 = ctx.currentTime + (delay || 0);
+      const lv = Math.max(1, Math.min(3, level || 1));
+      const vol = quiet ? 0.45 : 1;
+
+      /* 1) 치지직 — 고역 노이즈 크랙클 */
+      const pops = lv === 1 ? 5 : lv === 2 ? 7 : 11;
+      for (let i = 0; i < pops; i++) {
+        const tt = t0 + i * (0.022 + Math.random() * 0.028);
+        const src = ctx.createBufferSource();
+        src.buffer = this.noiseBuffer();
+        src.playbackRate.value = 1.5 + Math.random();
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'highpass';
+        bp.frequency.value = 2100 + Math.random() * 2800;
+        const g = ctx.createGain();
+        this._env(g, tt, 0.001, 0.03 + Math.random() * 0.03, (0.055 + lv * 0.022) * vol);
+        src.connect(bp); bp.connect(g); g.connect(master);
+        src.start(tt); src.stop(tt + 0.09);
+      }
+
+      /* 2) 잽 — 번개 줄기가 내리긋는 소리 */
+      const zap = ctx.createOscillator();
+      zap.type = 'sawtooth';
+      zap.frequency.setValueAtTime(1500 + lv * 260, t0);
+      zap.frequency.exponentialRampToValueAtTime(110, t0 + 0.16 + lv * 0.05);
+      const zf = ctx.createBiquadFilter();
+      zf.type = 'bandpass'; zf.frequency.value = 1750; zf.Q.value = 1.1;
+      const zg = ctx.createGain();
+      this._env(zg, t0, 0.002, 0.17 + lv * 0.06, (0.09 + lv * 0.012) * vol);
+      zap.connect(zf); zf.connect(zg); zg.connect(master);
+      zap.start(t0); zap.stop(t0 + 0.45);
+
+      /* 3) 묵직한 임팩트 — 턴부터 */
+      if (lv >= 2) {
+        const o = ctx.createOscillator(); o.type = 'sine';
+        o.frequency.setValueAtTime(lv === 3 ? 145 : 112, t0);
+        o.frequency.exponentialRampToValueAtTime(lv === 3 ? 30 : 42, t0 + (lv === 3 ? 0.95 : 0.45));
+        const og = ctx.createGain();
+        this._env(og, t0, 0.008, lv === 3 ? 1.05 : 0.5, (lv === 3 ? 0.34 : 0.2) * vol);
+        o.connect(og); og.connect(master);
+        o.start(t0); o.stop(t0 + 1.3);
+      }
+
+      /* 4) 천둥 — 리버 전용 */
+      if (lv >= 3) {
+        const th = ctx.createBufferSource();
+        th.buffer = this.noiseBuffer();
+        th.loop = true;
+        th.playbackRate.value = 0.4;
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';
+        lp.frequency.setValueAtTime(1100, t0);
+        lp.frequency.exponentialRampToValueAtTime(130, t0 + 1.7);
+        const tg = ctx.createGain();
+        tg.gain.setValueAtTime(0.0001, t0);
+        tg.gain.exponentialRampToValueAtTime(0.3 * vol, t0 + 0.07);
+        tg.gain.exponentialRampToValueAtTime(0.13 * vol, t0 + 0.85);
+        tg.gain.exponentialRampToValueAtTime(0.0001, t0 + 2.0);
+        th.connect(lp); lp.connect(tg); tg.connect(master);
+        th.start(t0); th.stop(t0 + 2.1);
+        /* 반짝이는 잔광 */
+        for (let i = 0; i < 7; i++) {
+          const tt = t0 + 0.12 + i * 0.06;
+          const s = ctx.createOscillator(); s.type = 'sine';
+          s.frequency.setValueAtTime(2400 + Math.random() * 3000, tt);
+          const sg = ctx.createGain();
+          sg.gain.setValueAtTime(0.0001, tt);
+          sg.gain.exponentialRampToValueAtTime(0.035 * vol, tt + 0.005);
+          sg.gain.exponentialRampToValueAtTime(0.0001, tt + 0.12);
+          s.connect(sg); sg.connect(master);
+          s.start(tt); s.stop(tt + 0.14);
+        }
+      }
+    },
+
     /* 나레이션/버튼 */
     tap(delay) {
       if (!this.enabled) return;

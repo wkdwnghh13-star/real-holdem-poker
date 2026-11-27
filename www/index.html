@@ -3,13 +3,54 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#08120c">
+<meta name="theme-color" content="#0a0320">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>리얼 홀덤 포커 · REAL HOLDEM</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <div id="app">
+
+  <!-- ============================================================ 로그인 -->
+  <section id="screen-auth" class="screen">
+    <div class="auth-bg"></div>
+    <div class="auth-wrap">
+      <div class="auth-brand">
+        <div class="auth-emblem">♠</div>
+        <h1>REAL HOLDEM</h1>
+        <p>NO LIMIT TEXAS HOLD'EM · NEON ARCADE</p>
+      </div>
+
+      <div class="auth-card">
+        <div class="auth-tabs" id="auth-tabs">
+          <button class="auth-tab active" data-mode="login" type="button">로그인</button>
+          <button class="auth-tab" data-mode="signup" type="button">회원가입</button>
+        </div>
+        <form id="auth-form" autocomplete="off">
+          <label class="auth-field">
+            <span>아이디</span>
+            <input id="auth-id" type="text" maxlength="16" autocapitalize="none" autocorrect="off" placeholder="영문·숫자 4~16자">
+          </label>
+          <label class="auth-field" id="auth-nick-row" hidden>
+            <span>닉네임</span>
+            <input id="auth-nick" type="text" maxlength="12" placeholder="테이블에 보일 이름">
+          </label>
+          <label class="auth-field">
+            <span>비밀번호</span>
+            <input id="auth-pw" type="password" maxlength="32" placeholder="4자 이상">
+          </label>
+          <div class="auth-err" id="auth-err"></div>
+          <button class="auth-submit" id="auth-submit" type="submit">로그인</button>
+        </form>
+        <button class="auth-guest" id="auth-guest" type="button">게스트로 바로 시작 →</button>
+      </div>
+
+      <div class="auth-foot">
+        <button id="auth-admin-hint" class="auth-hint" type="button">운영자 계정 안내</button>
+        <span>계정과 진행도는 이 기기에 저장됩니다</span>
+      </div>
+    </div>
+  </section>
 
   <!-- ============================================================ 로비 -->
   <section id="screen-lobby" class="screen active">
@@ -39,6 +80,7 @@
         <div class="wallet-tier">
           <div class="bar"><i id="tier-bar"></i></div>
           <small id="tier-next">실버까지 25,000</small>
+          <small id="pf-vip-points" class="vip-points">VIP 0P</small>
         </div>
       </div>
 
@@ -50,6 +92,29 @@
 
       <!-- 싱글 -->
       <div id="pane-single" class="pane active">
+        <div class="mode-grid" id="mode-grid">
+          <button class="mode-card cash" data-mode="cash" type="button">
+            <span class="mc-ico">🃏</span><b>캐시게임</b><i>6인 · 9인 자유 테이블</i><em>바로 입장 →</em>
+          </button>
+          <button class="mode-card hu" data-mode="headsup" type="button">
+            <span class="mc-ico">⚔️</span><b>헤즈업 1:1</b><i>SB=버튼 · 프리플랍 선액션</i><em>대결 →</em>
+          </button>
+          <button class="mode-card ranked" data-mode="ranked" type="button">
+            <span class="mc-ico">🏅</span><b>랭크겜</b><i>LP로 브론즈 → 그랜드마스터</i><em>입장 →</em>
+          </button>
+          <button class="mode-card tour" data-mode="tournament" type="button">
+            <span class="mc-ico">🏆</span><b>토너먼트</b><i>6인 S&amp;G · 상금 1~3등</i><em>참가 →</em>
+          </button>
+          <button class="mode-card spec" data-mode="spectate" type="button">
+            <span class="mc-ico">👀</span><b>프로 관전</b><i>프로·고수 6인 관전</i><em>관전 →</em>
+          </button>
+          <button class="mode-card pass" data-mode="pass" type="button">
+            <span class="mc-ico">🎫</span><b>네온 시즌패스</b><i>무료 + 프리미엄 보상 10레벨</i><em>보상 확인 →</em>
+          </button>
+          <button class="mode-card collection" data-mode="collection" type="button">
+            <span class="mc-ico">📚</span><b>컬렉션 도감</b><i>스킨 · 딜러 · 족보 수집 보상</i><em>도감 열기 →</em>
+          </button>
+        </div>
         <div class="size-row">
           <span>테이블</span>
           <button class="size-btn" data-size="2" type="button">헤즈업</button>
@@ -179,6 +244,21 @@
           <h2>스킨 &amp; 칭호</h2>
           <p>모은 칩으로 사거나, 토너먼트 우승으로 해금</p>
         </div>
+
+        <div class="shop-section charge-section">
+          <div class="charge-head">
+            <h3>💳 칩 현금 충전</h3>
+            <span class="charge-mode" id="charge-mode">테스트 샌드박스</span>
+          </div>
+          <p class="charge-note">실제 결제는 스토어 심사와 가맹점 키가 필요해서, 지금은 샌드박스로 즉시 충전돼. (실제 금액 청구 없음)</p>
+          <div id="charge-packs" class="charge-grid"></div>
+          <div id="charge-first" class="charge-first"></div>
+          <div class="charge-receipts-head">
+            <h3>영수증 내역</h3>
+            <span id="charge-total"></span>
+          </div>
+          <div id="charge-receipts" class="receipt-list"></div>
+        </div>
         <div class="shop-section">
           <h3>카드 뒷면</h3>
           <div id="shop-cards" class="shop-grid"></div>
@@ -186,6 +266,38 @@
         <div class="shop-section">
           <h3>테이블 펠트</h3>
           <div id="shop-felts" class="shop-grid"></div>
+        </div>
+        <div class="shop-section">
+          <h3>테이블 네온 림</h3>
+          <div id="shop-rims" class="shop-grid"></div>
+        </div>
+        <div class="shop-section">
+          <h3>번개 이펙트 스킨</h3>
+          <div id="shop-fx" class="shop-grid"></div>
+        </div>
+        <div class="shop-section">
+          <h3>카드 앞면</h3>
+          <div id="shop-faces" class="shop-grid"></div>
+        </div>
+        <div class="shop-section">
+          <h3>카드 드랍 이펙트</h3>
+          <div id="shop-drops" class="shop-grid"></div>
+        </div>
+        <div class="shop-section">
+          <h3>인게임 부스터</h3>
+          <div id="shop-boosters" class="booster-grid"></div>
+        </div>
+        <div class="shop-section">
+          <h3>프로필 스킨</h3>
+          <div id="shop-profiles" class="shop-grid"></div>
+        </div>
+        <div class="shop-section">
+          <h3>승리 연출</h3>
+          <div id="shop-wins" class="shop-grid"></div>
+        </div>
+        <div class="shop-section">
+          <h3>패배 연출</h3>
+          <div id="shop-loses" class="shop-grid"></div>
         </div>
         <div class="shop-section">
           <h3>칭호</h3>
@@ -198,6 +310,7 @@
         <span class="dot">·</span>
         <span id="pf-best">최고 족보 —</span>
         <button id="btn-gm-lobby" class="gm-mini" type="button">GM</button>
+        <button id="btn-logout" class="logout-mini" type="button">로그아웃</button>
       </footer>
     </div>
   </section>
@@ -211,6 +324,7 @@
         <span id="g-blinds">10 / 20</span>
       </div>
       <div class="top-actions">
+        <span id="g-rank" class="rank-chip"></span>
         <button id="btn-gm" class="icon-btn wide gm" type="button" aria-label="운영자">GM</button>
         <button id="btn-sound" class="icon-btn" type="button" aria-label="소리">🔊</button>
         <button id="btn-speed" class="icon-btn wide" type="button">1×</button>
@@ -259,6 +373,11 @@
         <div class="tt-track"><i class="tt-fill" id="tt-fill"></i></div>
         <span class="tt-num" id="tt-num">30s</span>
       </div>
+      <div id="boost-row" class="boost-row">
+        <button id="boost-2x" class="boost-btn" type="button"><b>2X WIN</b><i>승리 2배</i><em>0</em></button>
+        <button id="boost-blind" class="boost-btn blind" type="button"><b>BLIND ALL-IN</b><i>안 봤다 올인</i><em>0</em></button>
+        <button id="boost-risk" class="boost-btn risk" type="button"><b>플랍 2X</b><i>승리·패배 2배</i><em>0</em></button>
+      </div>
       <div class="raise-row">
         <div class="quick">
           <button data-q="mini" type="button">미니</button>
@@ -286,6 +405,8 @@
       </div>
     </div>
 
+    <canvas id="bolt-canvas"></canvas>
+    <div id="impact-layer"></div>
     <canvas id="fx-canvas"></canvas>
     <div id="fx-layer"></div>
     <div id="toast-layer"></div>
@@ -298,6 +419,7 @@
   <div class="modal-card">
     <h3>게임 메뉴</h3>
     <div class="menu-rows">
+      <button class="menu-row" id="menu-gm" type="button"><span>운영자 모드 <i>관리자 계정</i></span><b>OFF</b></button>
       <button class="menu-row" id="menu-speed" type="button"><span>게임 속도</span><b>보통</b></button>
       <button class="menu-row" id="menu-sound" type="button"><span>사운드</span><b>켜짐</b></button>
       <button class="menu-row" id="menu-haptic" type="button"><span>진동 피드백</span><b>켜짐</b></button>
@@ -368,6 +490,30 @@
 <div id="modal-gm" class="modal">
   <div class="modal-card wide">
     <h3>🛠 운영자(GM) 패널</h3>
+
+    <div class="gm-op-row">
+      <span>운영자 모드 <i>계정 인증됨</i></span>
+      <button id="gm-mode" class="gm-switch" type="button">ON</button>
+    </div>
+
+    <div class="gm-players-block">
+      <div class="gm-players-head">
+        <b>플레이어 정보 조회</b>
+        <button id="gm-players-refresh" class="btn-line small" type="button">새로고침</button>
+      </div>
+      <div id="gm-players" class="gm-players"></div>
+      <div class="gm-players-foot" id="gm-players-foot"></div>
+    </div>
+
+    <div class="gm-pass">
+      <b>시즌패스 테스트</b>
+      <div class="gm-inline">
+        <button id="gm-pass-xp" class="btn-line small" type="button">+120 XP</button>
+        <button id="gm-pass-lv" class="btn-line small" type="button">+1레벨</button>
+        <button id="gm-pass-prem" class="btn-line small" type="button">프리미엄 토글</button>
+      </div>
+    </div>
+
     <div class="gm-rows">
       <button class="menu-row" id="gm-auto" type="button"><span>AUTO 대리 플레이 <i>내 턴을 AI가 대신</i></span><b>꺼짐</b></button>
       <div class="gm-sub">
@@ -423,13 +569,130 @@
   </div>
 </div>
 
+<div id="modal-headsup" class="modal">
+  <div class="modal-card">
+    <h3>⚔️ 헤즈업 1:1</h3>
+    <p>버튼이 SB, 상대가 BB. 프리플랍은 SB가 먼저 액션하는 헤즈업 공식 규칙이야.</p>
+    <div class="field">
+      <label>상대 AI 난이도</label>
+      <div class="seg" id="hu-grade">
+        <button data-g="newbie" type="button">뉴비</button>
+        <button data-g="beginner" type="button">초보</button>
+        <button data-g="expert" class="on" type="button">고수</button>
+        <button data-g="pro" type="button">프로</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>블라인드</label>
+      <div class="seg" id="hu-blinds">
+        <button data-b="25/50" class="on" type="button">25/50</button>
+        <button data-b="50/100" type="button">50/100</button>
+        <button data-b="100/200" type="button">100/200</button>
+      </div>
+    </div>
+    <p class="hint" id="hu-buyin">바이인 5,000칩</p>
+    <div class="modal-actions">
+      <button class="btn-line close-modal" type="button">취소</button>
+      <button id="hu-friend" class="btn-line" type="button">친구와 1:1</button>
+      <button id="hu-start" class="btn-gold" type="button">AI와 대결</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-ranked" class="modal">
+  <div class="modal-card wide">
+    <h3>🏅 랭크겜</h3>
+    <div id="rank-hero" class="rank-hero"></div>
+    <div class="rank-bar"><i id="rank-bar-fill"></i></div>
+    <div id="rank-next" class="rank-next"></div>
+    <div class="rankboard-head"><b>리더보드</b><span>LP 순위</span></div>
+    <div id="rankboard-list" class="rankboard-list"></div>
+    <div class="modal-actions">
+      <button class="btn-line close-modal" type="button">닫기</button>
+      <button id="ranked-start" class="btn-gold" type="button">랭크겜 참가</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-collection" class="modal">
+  <div class="modal-card wide">
+    <div class="mp-lobby-head">
+      <h3>📚 컬렉션 도감</h3>
+      <button class="close-modal icon-btn" type="button">✕</button>
+    </div>
+    <div class="coll-hero">
+      <div class="coll-pct" id="coll-pct">0%</div>
+      <div class="coll-meta"><b>수집 달성률</b><span id="coll-summary">스킨 0 · 딜러 0/10 · 족보 0/9</span></div>
+    </div>
+    <div class="rank-bar"><i id="coll-bar-fill"></i></div>
+    <div id="coll-claims" class="coll-claims"></div>
+    <div class="coll-tabs">
+      <button class="coll-tab active" data-coll="skins" type="button">스킨</button>
+      <button class="coll-tab" data-coll="dealers" type="button">딜러</button>
+      <button class="coll-tab" data-coll="hands" type="button">족보</button>
+    </div>
+    <div id="coll-body" class="coll-body"></div>
+    <button class="btn-line close-modal" type="button">닫기</button>
+  </div>
+</div>
+
+<div id="modal-pass" class="modal">
+  <div class="modal-card wide">
+    <div class="mp-lobby-head">
+      <h3>🎫 네온 시즌패스</h3>
+      <button class="close-modal icon-btn" type="button">✕</button>
+    </div>
+    <div class="pass-hero">
+      <div class="pass-lv" id="pass-lv">1</div>
+      <div class="pass-meta"><b id="pass-title">레벨 1</b><span id="pass-xp">0 / 120 XP</span></div>
+      <div class="pass-prem" id="pass-prem">FREE</div>
+    </div>
+    <div class="rank-bar pass-bar"><i id="pass-bar-fill"></i></div>
+    <div class="pass-lines-head"><span>LV</span><span>무료 보상</span><span>프리미엄</span></div>
+    <div id="pass-rows" class="pass-rows"></div>
+    <div class="modal-actions">
+      <button class="btn-line close-modal" type="button">닫기</button>
+      <button id="pass-premium" class="btn-gold" type="button">프리미엄 해금 11,000원</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-charge" class="modal">
+  <div class="modal-card">
+    <h3>결제 확인</h3>
+    <div id="charge-summary" class="charge-summary"></div>
+    <div class="charge-pay-row">
+      <span>결제 수단</span>
+      <b id="charge-provider">테스트 샌드박스</b>
+    </div>
+    <p class="charge-notice" id="charge-notice">샌드박스 모드예요 — 실제 금액은 청구되지 않고, 확인을 누르면 바로 충전됩니다.</p>
+    <div class="modal-actions">
+      <button class="btn-line close-modal" type="button">취소</button>
+      <button id="charge-confirm" class="btn-gold" type="button">충전하기</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-admin-hint" class="modal">
+  <div class="modal-card">
+    <h3>🔑 운영자 계정</h3>
+    <p>운영자 계정으로 로그인하면 상단·메뉴에 운영자 모드 토글이 나타나고, 플레이어 정보 조회와 칩 지급/차감을 쓸 수 있어.</p>
+    <div id="admin-hint-body" class="admin-hint-body"></div>
+    <p class="admin-hint-note">※ 일반 계정에는 운영자 메뉴가 전혀 보이지 않아.</p>
+    <button class="btn-line close-modal" type="button">닫기</button>
+  </div>
+</div>
+
 <script src="vendor/peerjs.min.js"></script>
 <script src="js/poker-engine.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/cards.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/effects.js"></script>
+<script src="js/lightning.js"></script>
 <script src="js/progress.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/billing.js"></script>
 <script src="js/dealers.js"></script>
 <script src="js/game.js"></script>
 <script src="js/net.js"></script>

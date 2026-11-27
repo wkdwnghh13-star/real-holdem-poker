@@ -11,7 +11,9 @@
   const $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
   const sleep = global.sleepFn;
 
-  const AI_NAMES = ['카드샤크', '럭키제이', '벳사이즈', '리버퀸', '올인맥스', '타이트준', '슬로우플레이', '포커페이스'];
+  /* 상대 닉네임 — 일반 유저 화면에서는 실제 사람처럼 보인다 (AI 표시는 운영자 전용) */
+  const AI_NAMES = ['한강타짜', '블러핑장인', '포커페이스99', '리버헌터', '칩리더', '올인스타',
+    '슬로우롤', '매버릭', '퀸오브하트', '빅스택', '레이즈킹', '픽션러버'];
   const AI_AV = ['🦈', '🐺', '🦊', '🐯', '🦁', '🐻', '🐲', '🐼'];
   const QUICK_LABEL = { min: '최소', third: '1/3팟', half: '1/2팟', three4: '3/4팟', pot: '팟', double: '2배팟', max: '올인' };
   const QUICK_ALL = ['min', 'third', 'half', 'three4', 'pot', 'double', 'max'];
@@ -34,19 +36,33 @@
     lastHandResult: null,
     auto: false,
     autoGrade: 'expert',
+    huGrade: 'expert',
+    huBlinds: '25/50',
     gmUnlocked: false,
     gmPeek: false,
     gmBoard: false,
     preAction: null,
+    authMode: 'login',
+    boostDouble: false,
+    blindAllInPending: false,
+    riskActive: false,
 
     /* ---------------------------------------------------------------- init */
     init() {
+      const Auth = global.HoldemAuth;
       Pr.load();
+      Auth.load();
+      Auth.on(function () { App.syncAccountUI(); });
+      /* 계정별 진행도 저장 — Progress.save() 때마다 현재 계정에 기록 */
+      Pr.on(function () { Auth.persistProgress(Pr); });
+
       View.init({
         tableArea: $('#table-area'), seats: $('#seats'), board: $('#board'), pot: $('#pot'),
         heroPanel: $('#hero-panel'), heroCards: $('#hero-cards'),
-        fxCanvas: $('#fx-canvas'), fxLayer: $('#fx-layer')
-      }, { cardSkin: Pr.data.card, feltSkin: Pr.data.felt });
+        fxCanvas: $('#fx-canvas'), fxLayer: $('#fx-layer'),
+        boltCanvas: $('#bolt-canvas'), impactLayer: $('#impact-layer')
+      }, { cardSkin: Pr.data.card, feltSkin: Pr.data.felt, rimSkin: Pr.data.rim, fxSkin: Pr.data.fx,
+           faceSkin: Pr.data.cardFace, dropSkin: Pr.data.drop });
       View.onPeek = function () { Sound.tap(); };
 
       Haptic.setEnabled(Pr.data.haptics !== false);
@@ -58,18 +74,174 @@
       Sound.setBgmStyle(Pr.data.bgmStyle || 'lofi');
       this.renderLobby();
       this.bind();
+      this.bindAuth();
+      this.bindCharge();
       this.buildRankTable();
       this.applySpeedUI();
       this.applySoundUI();
       this.applyHapticUI();
       this.renderPreRow();
 
-      if (!Pr.data.tutorialDone) {
+      /* 로그인 세션이 있으면 바로 입장, 없으면 로그인 화면 */
+      if (Auth.session) this.enterAsAccount(Auth.current(), true);
+      else this.showAuth();
+
+      if (!Pr.data.tutorialDone && Auth.session) {
         setTimeout(function () { App.toast('튜토리얼로 3분만에 감 잡기 — 로비 아래 🎓 버튼'); }, 900);
       }
       // 첫 제스처에 오디오 활성화
       const wake = function () { Sound.resume(); document.removeEventListener('pointerdown', wake); };
       document.addEventListener('pointerdown', wake);
+    },
+
+    /* ------------------------------------------------------- 계정 · 로그인 UI */
+    showAuth() {
+      this.authMode = 'login';
+      $('#screen-game').classList.remove('active');
+      $('#screen-lobby').classList.remove('active');
+      $('#screen-auth').classList.add('active');
+      /* 로그아웃 후에는 항상 '로그인' 탭부터 */
+      $$('#auth-tabs .auth-tab').forEach(function (b) { b.classList.toggle('active', b.dataset.mode === 'login'); });
+      const nickRow = $('#auth-nick-row');
+      if (nickRow) nickRow.hidden = true;
+      const submit = $('#auth-submit');
+      if (submit) submit.textContent = '로그인';
+      const err = $('#auth-err');
+      if (err) err.textContent = '';
+    },
+
+    enterAsAccount(account, silent) {
+      const Auth = global.HoldemAuth;
+      if (!account) { this.showAuth(); return; }
+      Auth.attachProgress(Pr);
+      Pr.save();
+      this.applyAccountUI(account);
+      $('#screen-auth').classList.remove('active');
+      $('#screen-game').classList.remove('active');
+      $('#screen-lobby').classList.add('active');
+      this.renderLobby();
+      this.renderCharge();
+      if (!silent) {
+        Sound.fanfare(0);
+        this.toast(account.nick + '님 접속' + (account.role === 'admin' ? ' · 운영자 모드 활성화' : ''));
+      }
+    },
+
+    applyAccountUI(account) {
+      const admin = !!(account && account.role === 'admin');
+      document.body.classList.toggle('admin-account', admin);
+      if (admin) {
+        this.gmUnlocked = true;
+        document.body.classList.add('gm-visible');
+        $('#btn-gm').classList.add('on');
+      } else {
+        this.gmUnlocked = false;
+        this.gmPeek = false;
+        this.gmBoard = false;
+        document.body.classList.remove('gm-visible');
+        $('#btn-gm').classList.remove('on');
+      }
+      this.renderGm();
+      const nm = $('#pf-name');
+      if (nm && account) nm.textContent = account.nick + (admin ? ' · GM' : '');
+    },
+
+    syncAccountUI() {
+      const a = global.HoldemAuth.current();
+      this.applyAccountUI(a);
+      this.renderLobby();
+      if (a) this.renderCharge();
+    },
+
+    bindAuth() {
+      const self = this;
+      const Auth = global.HoldemAuth;
+      let mode = self.authMode || 'login';
+
+      function setMode(m) {
+        mode = m;
+        self.authMode = m;
+        $$('#auth-tabs .auth-tab').forEach(function (b) { b.classList.toggle('active', b.dataset.mode === m); });
+        $('#auth-nick-row').hidden = m !== 'signup';
+        $('#auth-submit').textContent = m === 'signup' ? '가입하고 시작' : '로그인';
+        $('#auth-err').textContent = '';
+        Sound.tap();
+      }
+      $$('#auth-tabs .auth-tab').forEach(function (b) {
+        b.addEventListener('click', function () { setMode(b.dataset.mode); });
+      });
+
+      $('#auth-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        const id = $('#auth-id').value.trim();
+        const pw = $('#auth-pw').value;
+        const nick = $('#auth-nick').value.trim();
+        if (!id) { $('#auth-err').textContent = '아이디를 입력해'; return; }
+        if (!pw) { $('#auth-err').textContent = '비밀번호를 입력해'; return; }
+        const r = self.authMode === 'signup' ? Auth.signup({ id: id, pw: pw, nick: nick }) : Auth.login(id, pw);
+        if (!r.ok) {
+          $('#auth-err').textContent = r.msg || '로그인 실패';
+          Sound.fold();
+          Haptic.fire(40);
+          return;
+        }
+        $('#auth-pw').value = '';
+        self.enterAsAccount(r.account, false);
+      });
+
+      $('#auth-guest').addEventListener('click', function () {
+        const r = Auth.guest();
+        self.enterAsAccount(r.account, false);
+      });
+
+      $('#auth-admin-hint').addEventListener('click', function () {
+        const body = $('#admin-hint-body');
+        body.innerHTML = Auth.adminHint().map(function (h) {
+          return '<div class="admin-hint-row"><b>' + h.id + '</b><span>PW ' + h.pw + '</span></div>';
+        }).join('');
+        $('#modal-admin-hint').classList.add('on');
+        Sound.tap();
+      });
+
+      $('#btn-logout').addEventListener('click', function () { self.logout(); });
+
+      $('#menu-gm').addEventListener('click', function () {
+        self.setGmMode(!self.gmUnlocked);
+      });
+      $('#gm-mode').addEventListener('click', function () {
+        self.setGmMode(!self.gmUnlocked);
+      });
+      $('#gm-players-refresh').addEventListener('click', function () {
+        self.renderGmPlayers();
+        Sound.tap();
+        self.toast('플레이어 정보 갱신');
+      });
+      $('#gm-players').addEventListener('click', function (e) {
+        const b = e.target.closest('button[data-grant]');
+        if (!b) return;
+        self.gmPlayerGrant(b.dataset.kind, b.dataset.key, +b.dataset.grant);
+      });
+    },
+
+    logout() {
+      if (this.running) {
+        this.running = false;
+        if (this.runner) this.runner.stop();
+        if (this.mp) { try { this.mp.close(); } catch (e) {} this.mp = null; }
+        this.engine = null; this.runner = null; this.snap = null; this.mode = null;
+        global.FX.clear();
+        if (global.Lightning) global.Lightning.clear();
+      }
+      Pr.save();
+      global.HoldemAuth.logout();
+      this.gmUnlocked = false;
+      this.gmPeek = false;
+      this.gmBoard = false;
+      this.auto = false;
+      document.body.classList.remove('admin-account', 'gm-visible');
+      $('#btn-gm').classList.remove('on');
+      this.showAuth();
+      this.toast('로그아웃했어');
     },
 
     bind() {
@@ -96,6 +268,97 @@
       });
       this.size = Pr.data.tableSize || 6;
       $$('#pane-single .size-btn').forEach(function (b) { b.classList.toggle('on', +b.dataset.size === App.size); });
+
+      /* 아케이드 모드 카드 — 캐시 / 헤즈업 / 랭크 / 토너먼트 / 관전 */
+      $$('#mode-grid .mode-card').forEach(function (b) {
+        b.addEventListener('click', function () {
+          Sound.tap();
+          const m = b.dataset.mode;
+          if (m === 'cash') {
+            const r = $('#room-list');
+            if (r && r.scrollIntoView) r.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            self.toast('캐시게임 — 아래 방을 골라 입장');
+          } else if (m === 'headsup') self.openHeadsUp();
+          else if (m === 'ranked') self.openRanked();
+          else if (m === 'tournament') self.startTournament();
+          else if (m === 'spectate') self.startSpectate();
+          else if (m === 'pass') self.openPass();
+          else if (m === 'collection') self.openCollection();
+        });
+      });
+
+      /* 헤즈업 모달 */
+      $('#hu-start').addEventListener('click', function () {
+        $('#modal-headsup').classList.remove('on');
+        self.startHeadsUpWith(self.huGrade, +self.huBlinds.split('/')[0], +self.huBlinds.split('/')[1]);
+      });
+      $('#hu-friend').addEventListener('click', function () { self.startFriendHeadsUp(); });
+      $$('#hu-grade button').forEach(function (b) {
+        b.addEventListener('click', function () {
+          $$('#hu-grade button').forEach(function (x) { x.classList.remove('on'); });
+          b.classList.add('on');
+          self.huGrade = b.dataset.g;
+          Sound.tap();
+        });
+      });
+      $$('#hu-blinds button').forEach(function (b) {
+        b.addEventListener('click', function () {
+          $$('#hu-blinds button').forEach(function (x) { x.classList.remove('on'); });
+          b.classList.add('on');
+          self.huBlinds = b.dataset.b;
+          self.renderHeadsUp();
+          Sound.tap();
+        });
+      });
+      $('#ranked-start').addEventListener('click', function () {
+        $('#modal-ranked').classList.remove('on');
+        self.startRanked();
+      });
+      $('#g-rank').addEventListener('click', function () { if (self.mode === 'ranked') self.openRanked(); });
+      $('#boost-2x').addEventListener('click', function () { self.activateBoost('double'); });
+      $('#boost-blind').addEventListener('click', function () { self.blindAllIn(); });
+      $('#boost-risk').addEventListener('click', function () { self.activateRisk(); });
+      $$('.coll-tab').forEach(function (b) {
+        b.addEventListener('click', function () {
+          $$('.coll-tab').forEach(function (x) { x.classList.remove('active'); });
+          b.classList.add('active');
+          self.renderCollection(b.dataset.coll);
+          Sound.tap();
+        });
+      });
+      $('#coll-claims').addEventListener('click', function (e) {
+        const b = e.target.closest('button[data-coll-claim]');
+        if (!b) return;
+        self.claimCollectionReward(b.dataset.collClaim);
+      });
+
+      /* 시즌패스 */
+      $('#pass-rows').addEventListener('click', function (e) {
+        const b = e.target.closest('button[data-claim]');
+        if (!b) return;
+        self.claimPassReward(b.dataset.claim, +b.dataset.lv);
+      });
+      $('#pass-premium').addEventListener('click', function () { self.unlockPremiumPass(); });
+      $('#gm-pass-xp').addEventListener('click', function () {
+        Pr.addPassXP(Pr.passStep);
+        self.renderPass();
+        self.toast('+' + Pr.passStep + ' 패스 XP');
+        Sound.tap();
+      });
+      $('#gm-pass-lv').addEventListener('click', function () {
+        const need = Pr.passLevel() * Pr.passStep - (Pr.data.passXP || 0);
+        Pr.addPassXP(Math.max(Pr.passStep, need));
+        self.renderPass();
+        self.toast('패스 레벨업');
+        Sound.tap();
+      });
+      $('#gm-pass-prem').addEventListener('click', function () {
+        Pr.data.passPremium = !Pr.data.passPremium;
+        Pr.save();
+        self.renderPass();
+        self.toast('프리미엄 패스 ' + (Pr.data.passPremium ? 'ON' : 'OFF'));
+        Sound.tap();
+      });
 
       $('#btn-refill').addEventListener('click', function () {
         const amt = Pr.refill(50000);
@@ -260,28 +523,13 @@
         Sound.tap(); self.renderCfg();
       });
 
-      // GM (기본 숨김 — 로비 브랜드 또는 게임 방 제목 5번 연속 탭으로 PIN 인증 후 표시)
+      // 운영자 모드 — 운영자 계정으로 로그인하면 자동 활성화 (일반 계정에는 숨김)
       $('#btn-gm').addEventListener('click', function () { self.gmOpen(); });
       $('#btn-gm-lobby').addEventListener('click', function () { self.gmOpen(); });
       $('#gm-pin-ok').addEventListener('click', function () { self.gmTryUnlock(); });
       $('#gm-pin').addEventListener('keydown', function (e) {
         if (e.key === 'Enter') self.gmTryUnlock();
       });
-      var gmTapCount = 0, gmTapTimer = null;
-      function bindSecretGm(el) {
-        if (!el) return;
-        el.addEventListener('click', function () {
-          gmTapCount++;
-          clearTimeout(gmTapTimer);
-          gmTapTimer = setTimeout(function () { gmTapCount = 0; }, 1400);
-          if (gmTapCount >= 5) {
-            gmTapCount = 0;
-            self.gmOpen();
-          }
-        });
-      }
-      bindSecretGm($('.brand'));
-      bindSecretGm($('#g-room'));
       document.addEventListener('pointerdown', function () { Sound.resume(); }, { passive: true });
       $('#gm-peek').addEventListener('click', function () { self.gmTogglePeek(); });
       $('#gm-board').addEventListener('click', function () { self.gmToggleBoard(); });
@@ -304,15 +552,8 @@
         self.toast('PIN 변경됨');
       });
       $('#gm-hide').addEventListener('click', function () {
-        self.gmUnlocked = false;
-        self.gmPeek = false;
-        self.gmBoard = false;
-        self.auto = false;
-        document.body.classList.remove('gm-visible');
-        $('#btn-gm').classList.remove('on');
-        $('#modal-gm').classList.remove('on');
-        if (self.snap) self.refreshView();
-        self.toast('운영자 모드 OFF (제목 5번 탭으로 다시 켜기)');
+        self.setGmMode(false);
+        self.toast('운영자 모드 OFF');
       });
       const specBtn = $('#btn-spectate');
       if (specBtn) specBtn.addEventListener('click', function () { self.startSpectate(); });
@@ -378,12 +619,16 @@
 
       $('#pf-stats').textContent = d.hands + '핸드 · ' + d.wins + '승';
       $('#pf-best').textContent = d.bestHandCat >= 0 ? ('최고 족보 ' + (d.bestHandName || '')) : '최고 족보 —';
+      const vp = $('#pf-vip-points');
+      if (vp) vp.textContent = 'VIP ' + (d.vipPoints || 0) + 'P · ' + Pr.rank().name + ' ' + (d.lp || 0) + 'LP';
+      document.body.dataset.profile = d.profile || 'cyber_cyan';
 
       this.renderRooms();
       this.renderShop();
+      this.renderCharge();
       this.renderTournamentCard();
       this.renderCfg();
-      View.setSkins(d.card, d.felt);
+      View.setSkins(d.card, d.felt, d.rim, d.fx, d.cardFace, d.drop);
     },
 
     renderRooms() {
@@ -426,9 +671,9 @@
 
     renderTournamentCard() {
       const card = $('#card-tournament');
-      const locked = Pr.tierIndex() < 1;
-      card.classList.toggle('locked', locked);
-      $('.tour-btn', card).textContent = locked ? '실버 필요' : '참가';
+      if (!card) return;
+      card.classList.remove('locked');
+      $('.tour-btn', card).textContent = '참가';
     },
 
     renderShop() {
@@ -530,8 +775,64 @@
         fc.appendChild(el);
       });
 
-      const tc = $('#shop-titles');
-      tc.innerHTML = '';
+      this.renderSkinGrid('#shop-drops', 'drop', global.DROP_SKINS || [], 'drop', function (s) {
+        const d = document.createElement('div');
+        d.className = 'fx-prev drop-prev';
+        d.style.setProperty('--fx-a', s.a);
+        d.style.setProperty('--fx-b', s.b);
+        d.textContent = s.id === 'drop_gold' ? '✨' : s.id === 'drop_bolt' ? '⚡' : '✦';
+        return d;
+      });
+      this.renderSkinGrid('#shop-faces', 'face', global.FACE_SKINS || [], 'cardFace', function (s) {
+        const card = C.cardEl({ r: 14, s: 0 }, { skin: Pr.data.card });
+        card.style.setProperty('--w', '34px');
+        if (s.id === 'face_cyber') card.dataset.face = 'cyber';
+        if (s.id === 'face_gold') card.dataset.face = 'gold';
+        return card;
+      });
+      this.renderBoosters();
+      this.renderSkinGrid('#shop-profiles', 'profile', global.PROFILE_SKINS || [], 'profile', function (s) {
+        const d = document.createElement('div');
+        d.className = 'pf-prev';
+        d.style.setProperty('--pa', s.a);
+        d.style.setProperty('--pb', s.b);
+        d.textContent = '🎯';
+        return d;
+      });
+      this.renderSkinGrid('#shop-wins', 'win', global.WIN_SKINS || [], 'winFx', function (s) {
+        const d = document.createElement('div');
+        d.className = 'fx-prev';
+        d.style.setProperty('--fx-a', s.id === 'win_gold' ? '#ffe27a' : '#00f5ff');
+        d.style.setProperty('--fx-b', s.id === 'win_bolt' ? '#ff2bd6' : '#7b2bff');
+        d.textContent = s.id === 'win_gold' ? '🪙' : s.id === 'win_bolt' ? '⚡' : '🎉';
+        return d;
+      });
+      this.renderSkinGrid('#shop-loses', 'lose', global.LOSE_SKINS || [], 'loseFx', function (s) {
+        const d = document.createElement('div');
+        d.className = 'fx-prev';
+        d.style.setProperty('--fx-a', '#ff6b9d');
+        d.style.setProperty('--fx-b', '#7b2bff');
+        d.textContent = s.id === 'lose_powerdown' ? '🔌' : '📺';
+        return d;
+      });
+
+      /* 테이블 네온 림 / 번개 이펙트 스킨 */
+      this.renderSkinGrid('#shop-rims', 'rim', global.RIM_SKINS || [], 'rim', function (s) {
+        const d = document.createElement('div');
+        d.className = 'rim-prev';
+        d.style.background = 'conic-gradient(from 200deg,' + s.a + ',' + s.b + ',' + s.a + ')';
+        return d;
+      });
+      this.renderSkinGrid('#shop-fx', 'fx', global.FX_SKINS || [], 'fx', function (s) {
+        const d = document.createElement('div');
+        d.className = 'fx-prev';
+        d.style.setProperty('--fx-a', s.a);
+        d.style.setProperty('--fx-b', s.b);
+        d.textContent = '⚡';
+        return d;
+      });
+
+      const tc = $('#shop-titles');      tc.innerHTML = '';
       const equipped = Pr.data.title;
       Pr.titles().forEach(function (t) {
         const el = document.createElement('div');
@@ -554,17 +855,465 @@
       });
     },
 
+    /* 스킨 그리드 공통 렌더러 (림 · 이펙트 등) */
+    renderSkinGrid(sel, kind, list, eqKey, makePrev) {
+      const host = $(sel);
+      if (!host) return;
+      const self = this;
+      host.innerHTML = '';
+      list.forEach(function (s) {
+        const owns = Pr.owns(kind, s.id);
+        const eq = Pr.data[eqKey] === s.id;
+        const el = document.createElement('div');
+        el.className = 'shop-item' + (owns ? ' owned' : '') + (eq ? ' equipped' : '');
+        const prev = document.createElement('div');
+        prev.className = 'prev';
+        prev.appendChild(makePrev(s));
+        el.appendChild(prev);
+        const b = document.createElement('b'); b.textContent = s.name; el.appendChild(b);
+        const price = document.createElement('div');
+        price.className = 'price' + (s.price === 0 ? ' free' : '');
+        price.textContent = s.price === 0 ? '기본' : C.fmt(s.price) + ' 칩';
+        el.appendChild(price);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        if (!owns) {
+          btn.className = 'buy'; btn.textContent = self.gmUnlocked ? '무료(GM)' : '구매';
+          btn.addEventListener('click', function () {
+            if (self.gmUnlocked) {
+              const arrKey = Pr._kind(kind).arr;
+              if ((Pr.data[arrKey] || []).indexOf(s.id) < 0) Pr.data[arrKey] = (Pr.data[arrKey] || []).concat([s.id]);
+              Pr.save();
+            } else {
+              const r = Pr.buy(kind, s.id);
+              if (!r.ok) { self.toast(r.msg); Sound.fold(); return; }
+            }
+            Pr.equip(kind, s.id);
+            Sound.chip(0, 5);
+            self.toast(s.name + ' 해금 & 장착!');
+            self.renderLobby();
+          });
+        } else if (eq) {
+          btn.className = 'eq'; btn.textContent = '사용 중'; btn.disabled = true;
+        } else {
+          btn.textContent = '장착';
+          btn.addEventListener('click', function () {
+            Pr.equip(kind, s.id); Sound.tap();
+            self.toast(s.name + ' 장착'); self.renderLobby();
+          });
+        }
+        el.appendChild(btn);
+        host.appendChild(el);
+      });
+    },
+
+    /* ------------------------------------------------------- 현금 충전 상점 */
+    bindCharge() {
+      const self = this;
+      const packs = $('#charge-packs');
+      if (!packs) return;
+      packs.addEventListener('click', function (e) {
+        const b = e.target.closest('.charge-pack');
+        if (!b) return;
+        self.openCharge(b.dataset.pkg);
+      });
+      $('#charge-confirm').addEventListener('click', function () { self.confirmCharge(); });
+    },
+
+    renderCharge() {
+      const B = global.HoldemBilling;
+      const packs = $('#charge-packs');
+      if (!packs || !B) return;
+      const first = B.isFirstCharge();
+      packs.innerHTML = B.packages.map(function (p) {
+        const q = B.quote(p.id);
+        return '<button class="charge-pack' + (p.tag === '추천' ? ' hot' : '') + '" type="button" data-pkg="' + p.id + '">' +
+          '<span class="cp-tag">' + p.tag + '</span>' +
+          '<span class="cp-chips">' + C.fmt(q.total) + ' 칩</span>' +
+          '<span class="cp-price">' + p.price.toLocaleString('ko-KR') + '원</span>' +
+          '<span class="cp-bonus">' + (first ? '첫 충전 +' + B.firstBonus + '% 포함' : (p.bonus ? '+' + p.bonus + '% 보너스' : '기본 패키지')) + '</span>' +
+        '</button>';
+      }).join('');
+      $('#charge-mode').textContent = B.providerLabel();
+      $('#charge-first').textContent = first
+        ? '🎁 첫 충전 보너스 +' + B.firstBonus + '% — 모든 패키지가 두 배로 들어와'
+        : '누적 충전 ' + (Pr.data.totalCharged || 0).toLocaleString('ko-KR') + '원';
+      const list = global.HoldemAuth.receipts();
+      const box = $('#charge-receipts');
+      box.innerHTML = list.length ? list.map(function (r) {
+        const d = new Date(r.at);
+        const p2 = function (n) { return String(n).padStart(2, '0'); };
+        const ts = d.getFullYear() + '.' + p2(d.getMonth() + 1) + '.' + p2(d.getDate()) + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+        return '<div class="receipt-row"><div><b>' + r.name + '</b><br><span>' + ts + ' · ' + r.provider + '</span></div>' +
+          '<div class="rr-chips">+' + C.fmt(r.chips) + '</div></div>';
+      }).join('') : '<div class="receipt-empty">아직 충전 내역이 없어</div>';
+      const total = list.reduce(function (s, r) { return s + (r.price || 0); }, 0);
+      $('#charge-total').textContent = list.length ? (list.length + '건 · ' + total.toLocaleString('ko-KR') + '원') : '';
+    },
+
+    openCharge(pkgId) {
+      const B = global.HoldemBilling;
+      const q = B && B.quote(pkgId);
+      if (!q) return;
+      this._chargePkg = pkgId;
+      $('#charge-summary').innerHTML =
+        '<div class="cs-row"><span>' + q.pkg.tag + ' 패키지</span><b>' + q.base.toLocaleString('ko-KR') + ' 칩</b></div>' +
+        (q.pkgBonus ? '<div class="cs-row"><span>패키지 보너스 +' + q.pkg.bonus + '%</span><b>+' + q.pkgBonus.toLocaleString('ko-KR') + '</b></div>' : '') +
+        (q.firstBonus ? '<div class="cs-row"><span>첫 충전 보너스 +' + B.firstBonus + '%</span><b>+' + q.firstBonus.toLocaleString('ko-KR') + '</b></div>' : '') +
+        '<div class="cs-row total"><span>충전 칩</span><b>' + q.total.toLocaleString('ko-KR') + '</b></div>' +
+        '<div class="cs-row"><span>결제 금액</span><b>' + q.price.toLocaleString('ko-KR') + '원</b></div>';
+      $('#charge-provider').textContent = B.providerLabel();
+      $('#charge-notice').textContent = B.isRealProvider()
+        ? '결제를 누르면 스토어/가맹점 결제창이 열려.'
+        : '샌드박스 모드예요 — 실제 금액은 청구되지 않고, 확인을 누르면 바로 충전됩니다.';
+      const btn = $('#charge-confirm');
+      btn.disabled = false;
+      btn.textContent = '충전하기';
+      $('#modal-charge').classList.add('on');
+      Sound.tap();
+    },
+
+    async confirmCharge() {
+      const B = global.HoldemBilling;
+      const pkgId = this._chargePkg;
+      if (!B || !pkgId) return;
+      const btn = $('#charge-confirm');
+      btn.disabled = true;
+      btn.textContent = '결제 처리 중…';
+      const r = await B.purchase(pkgId, {});
+      btn.disabled = false;
+      btn.textContent = '충전하기';
+      if (!r.ok) {
+        this.toast('❌ ' + (r.error || '결제 실패'));
+        Sound.fold();
+        return;
+      }
+      $('#modal-charge').classList.remove('on');
+      this.renderLobby();
+      this.renderCharge();
+      Sound.chip(0, 8);
+      Sound.fanfare(0.1);
+      if (global.FX) global.FX.coinShower(innerWidth / 2, innerHeight * 0.35, innerWidth * 0.7, 30);
+      this.toast('+' + C.fmt(r.chips) + ' 칩 충전 완료 · 영수증 ' + r.receipt.id);
+      this._chargePkg = null;
+    },
+
+    /* ---------------------------------------------------------- 시즌패스 */
+    openPass() {
+      this.renderPass();
+      $('#modal-pass').classList.add('on');
+      Sound.tap();
+    },
+
+    renderPass() {
+      const lv = Pr.passLevel();
+      const rows = $('#pass-rows');
+      if (!rows) return;
+      $('#pass-lv').textContent = lv;
+      $('#pass-title').textContent = '레벨 ' + lv + ' / 10';
+      $('#pass-xp').textContent = (Pr.data.passXP || 0) + ' XP' +
+        (lv < 10 ? ' · 다음까지 ' + Math.max(0, lv * Pr.passStep - (Pr.data.passXP || 0)) : ' · MAX');
+      $('#pass-bar-fill').style.width = Math.round(Pr.passProgress() * 100) + '%';
+      const prem = $('#pass-prem');
+      prem.textContent = Pr.data.passPremium ? 'PREMIUM' : 'FREE';
+      prem.classList.toggle('on', !!Pr.data.passPremium);
+      $('#pass-premium').style.display = Pr.data.passPremium ? 'none' : '';
+
+      const fmtReward = function (r) {
+        if (!r) return '—';
+        const parts = [];
+        if (r.chips) parts.push(C.fmt(r.chips) + '칩');
+        if (r.boosters) Object.keys(r.boosters).forEach(function (k) {
+          parts.push((k === 'double' ? '2X WIN' : 'BLIND') + ' x' + r.boosters[k]);
+        });
+        if (r.profile) parts.push('프로필 스킨');
+        if (r.face) parts.push('카드 앞면');
+        return parts.join(' · ');
+      };
+      const btn = function (line, level, locked) {
+        const claimed = Pr.passClaimed(line, level);
+        const can = !claimed && !locked && Pr.passLevel() >= level;
+        return '<button type="button" class="pass-claim' + (claimed ? ' done' : '') + '"' +
+          ' data-claim="' + line + '" data-lv="' + level + '"' + (can ? '' : ' disabled') + '>' +
+          (claimed ? '완료' : locked ? '🔒' : '받기') + '</button>';
+      };
+      rows.innerHTML = Pr.passLevels().map(function (l) {
+        const claimedAny = Pr.passClaimed('free', l.lv) || Pr.passClaimed('premium', l.lv);
+        return '<div class="pass-row' + (claimedAny ? ' done' : '') + '">' +
+          '<span class="pr-lv">' + l.lv + '</span>' +
+          '<span class="pr-free">' + fmtReward(l.free) + '</span>' + btn('free', l.lv, false) +
+          '<span class="pr-prem">' + fmtReward(l.premium) + '</span>' + btn('premium', l.lv, !Pr.data.passPremium) +
+        '</div>';
+      }).join('');
+    },
+
+    claimPassReward(line, lv) {
+      const r = Pr.claimPass(line, lv);
+      if (!r.ok) { this.toast(r.msg); Sound.fold(); return; }
+      Sound.chip(0, 6);
+      Sound.fanfare(0.05);
+      global.FX.coinShower(innerWidth / 2, innerHeight * 0.35, innerWidth * 0.7, 24);
+      if (r.reward.profile) Pr.equip('profile', r.reward.profile);
+      this.toast('시즌패스 LV' + lv + ' ' + (line === 'premium' ? '프리미엄' : '무료') + ' 보상 수령!');
+      this.renderPass();
+      this.renderLobby();
+    },
+
+    async unlockPremiumPass() {
+      const B = global.HoldemBilling;
+      const btn = $('#pass-premium');
+      btn.disabled = true;
+      btn.textContent = '결제 처리 중…';
+      const r = await B.purchasePremiumPass();
+      btn.disabled = false;
+      btn.textContent = '프리미엄 해금 11,000원';
+      if (!r.ok) { this.toast('❌ ' + r.error); return; }
+      this.renderPass();
+      this.renderLobby();
+      Sound.trophy();
+      this.toast('프리미엄 시즌패스 해금! 10레벨 보상이 열렸어');
+    },
+
+    /* ---------------------------------------------------------- 컬렉션 도감 */
+    openCollection() {
+      this._collTab = this._collTab || 'skins';
+      $$('.coll-tab').forEach(function (b) { b.classList.toggle('active', b.dataset.coll === App._collTab); });
+      this.renderCollection(this._collTab);
+      $('#modal-collection').classList.add('on');
+      Sound.tap();
+    },
+
+    renderCollection(tab) {
+      const st = Pr.collectionStats();
+      const pct = $('#coll-pct');
+      if (!pct) return;
+      pct.textContent = st.pct + '%';
+      $('#coll-summary').textContent = '스킨 ' + st.ownedSkins + '/' + st.totalSkins + ' · 딜러 ' + st.dealers + '/10 · 족보 ' + st.cats + '/9';
+      $('#coll-bar-fill').style.width = st.pct + '%';
+
+      const claims = $('#coll-claims');
+      const claimBtn = function (kind, need, reward, label) {
+        const done = (Pr.data.collectionClaims || []).indexOf(kind) >= 0;
+        return '<button type="button" class="coll-claim' + (done ? ' done' : '') + '"' +
+          ' data-coll-claim="' + kind + '"' + (done || need ? '' : ' disabled') + '>' +
+          (done ? '✅ ' + label : label + ' +' + C.fmt(reward)) + '</button>';
+      };
+      claims.innerHTML =
+        claimBtn('dealers', st.dealers < 10, 50000, '딜러 도감') +
+        claimBtn('cats', st.cats < 9, 100000, '족보 도감') +
+        claimBtn('collection', st.pct < 100, 150000, '완전 수집');
+
+      const body = $('#coll-body');
+      if (tab === 'dealers') {
+        const met = Pr.data.dealersMet || [];
+        body.innerHTML = '<div class="coll-grid">' + (global.Dealers ? global.Dealers.list.map(function (d) {
+          const on = met.indexOf(d.id) >= 0;
+          return '<div class="coll-dealer' + (on ? ' met' : '') + '">' +
+            '<div class="cd-pic" style="background-image:url(\'' + d.src + '\')"></div>' +
+            '<b>' + (on ? d.name : '???') + '</b><i>' + (on ? d.outfit : '아직 못 만남') + '</i></div>';
+        }).join('') : '') + '</div>';
+      } else if (tab === 'hands') {
+        const cats = Pr.data.catsSeen || [];
+        body.innerHTML = '<div class="coll-grid">' + (P.CAT_KO || []).map(function (name, i) {
+          const on = cats.indexOf(i) >= 0;
+          return '<div class="coll-cat' + (on ? ' met' : '') + '"><b>' + (on ? name : '???') + '</b><i>' + (on ? '달성' : '미달성') + '</i></div>';
+        }).join('') + '</div>';
+      } else {
+        const groups = [
+          ['카드 뒷면', 'card', global.CARD_SKINS], ['펠트', 'felt', global.FELT_SKINS],
+          ['네온 림', 'rim', global.RIM_SKINS], ['번개', 'fx', global.FX_SKINS],
+          ['카드 앞면', 'face', global.FACE_SKINS], ['드랍', 'drop', global.DROP_SKINS],
+          ['프로필', 'profile', global.PROFILE_SKINS], ['승리', 'win', global.WIN_SKINS],
+          ['패배', 'lose', global.LOSE_SKINS]
+        ];
+        body.innerHTML = groups.map(function (g) {
+          return '<div class="coll-group"><b>' + g[0] + '</b><div class="coll-chips">' +
+            (g[2] || []).map(function (s) {
+              const own = Pr.owns(g[1], s.id);
+              return '<span class="coll-chip' + (own ? ' own' : '') + '">' + (own ? s.name : '???') + '</span>';
+            }).join('') + '</div></div>';
+        }).join('');
+      }
+    },
+
+    claimCollectionReward(kind) {
+      const r = Pr.claimCollection(kind);
+      if (!r.ok) { this.toast(r.msg); Sound.fold(); return; }
+      Sound.trophy();
+      global.FX.coinShower(innerWidth / 2, innerHeight * 0.35, innerWidth * 0.7, 40);
+      this.toast('컬렉션 보상 +' + C.fmt(r.reward) + ' 칩!');
+      this.renderCollection(this._collTab);
+      this.renderLobby();
+    },
+
+    /* ---------------------------------------------------------- 인게임 부스터 */
+    renderBoosters() {
+      const host = $('#shop-boosters');
+      if (!host) return;
+      const self = this;
+      host.innerHTML = (global.BOOSTERS || []).map(function (b) {
+        const n = Pr.boosterCount(b.id);
+        return '<div class="booster-item' + (b.id === 'blind' ? ' blind' : '') + '">' +
+          '<div class="bi-top"><b>' + b.name + '</b><span>' + n + '개</span></div>' +
+          '<i>' + b.desc + '</i>' +
+          '<button type="button" data-buy="' + b.id + '">' + C.fmt(b.price) + '칩 · ' + b.qty + '개</button>' +
+        '</div>';
+      }).join('');
+      host.onclick = function (e) {
+        const btn = e.target.closest('button[data-buy]');
+        if (!btn) return;
+        const id = btn.dataset.buy;
+        if (self.gmUnlocked) {
+          Pr.data.boosters = Pr.data.boosters || {};
+          Pr.data.boosters[id] = Pr.boosterCount(id) + 3;
+          Pr.save();
+        } else {
+          const r = Pr.buyBooster(id);
+          if (!r.ok) { self.toast(r.msg); Sound.fold(); return; }
+        }
+        const item = (global.BOOSTERS || []).filter(function (x) { return x.id === id; })[0] || {};
+        Sound.chip(0, 6);
+        self.toast((item.name || id) + ' 3개 구매 완료');
+        self.renderLobby();
+        self.refreshBoostUI();
+      };
+    },
+
+    refreshBoostUI() {
+      const d = $('#boost-2x'), b = $('#boost-blind'), r = $('#boost-risk');
+      if (!d || !b) return;
+      const nd = Pr.boosterCount('double'), nb = Pr.boosterCount('blind'), nr = Pr.boosterCount('risk');
+      d.querySelector('em').textContent = nd;
+      b.querySelector('em').textContent = nb;
+      d.classList.toggle('on', !!this.boostDouble);
+      d.disabled = nd <= 0 && !this.boostDouble;
+      b.disabled = nb <= 0;
+      const inGame = !!this.engine && this.mode !== 'tutorial';
+      d.style.display = inGame ? '' : 'none';
+      b.style.display = inGame ? '' : 'none';
+      if (r) {
+        r.querySelector('em').textContent = nr;
+        r.classList.toggle('on', !!this.riskActive);
+        r.disabled = nr <= 0 || !(this.snap && this.snap.street === 'flop');
+        r.style.display = inGame ? '' : 'none';
+      }
+    },
+
+    /* 플랍 2X 승부권 — 승리 2배 / 패배 2배 */
+    activateRisk() {
+      if (!this.engine || !this.snap) { this.toast('게임 중에만 사용할 수 있어'); return; }
+      if (this.snap.street !== 'flop') { this.toast('플랍에서만 적용할 수 있어'); return; }
+      if (this.riskActive) { this.toast('이미 이번 판에 적용 중'); return; }
+      if (Pr.boosterCount('risk') <= 0) { this.toast('플랍 2X 승부권이 없어 — 상점에서 구매'); return; }
+      Pr.useBooster('risk');
+      this.riskActive = true;
+      this.refreshBoostUI();
+      global.FX.banner('2X RISK!', '승리 2배 · 패배 2배', { cls: 'win', duration: 1800 });
+      Sound.bolt(2);
+      Haptic.fire([30, 40, 80]);
+      this.toast('플랍 2X 승부 ON — 이번 판 결과가 2배로 적용');
+    },
+
+    activateBoost(id) {
+      if (!this.engine) { this.toast('게임 중에만 사용할 수 있어'); return; }
+      if (id === 'double') {
+        if (this.boostDouble) {
+          this.boostDouble = false;
+          this.refreshBoostUI();
+          this.toast('2X WIN 해제');
+          return;
+        }
+        if (Pr.boosterCount('double') <= 0) { this.toast('2X WIN 부스터가 없어 — 상점에서 구매'); return; }
+        Pr.useBooster('double');
+        this.boostDouble = true;
+        this.refreshBoostUI();
+        Sound.fanfare(0.04);
+        Haptic.fire(30);
+        global.FX.banner('2X WIN!', '이번 판 승리 2배', { cls: 'win', duration: 1700 });
+        this.toast('2X WIN ON — 이번 판 승리 시 획득 2배');
+      }
+    },
+
+    /* 안 봤다 올인 — 프리플랍에 카드를 보지 않고 올인 */
+    blindAllIn() {
+      const o = this.options;
+      if (!this.engine || !o || !this.snap) { this.toast('내 차례에만 가능해'); return; }
+      if (this.snap.street !== 'preflop') { this.toast('프리플랍에서만 쓸 수 있어'); return; }
+      if (!o.canRaise) { this.toast('지금은 올인할 수 없어'); return; }
+      if (Pr.boosterCount('blind') <= 0) { this.toast('BLIND ALL-IN 부스터가 없어 — 상점에서 구매'); return; }
+      Pr.useBooster('blind');
+      Pr.addPassXP(15);
+      this.blindAllInPending = true;
+      this.refreshBoostUI();
+      /* 카드가 뒤집히지 않은 상태 유지 */
+      View.heroRevealed = false;
+      View.startTimer = null;
+      const heroEl = document.querySelector('#hero-cards .hero-card');
+      if (heroEl && global.Lightning) {
+        const r = heroEl.getBoundingClientRect();
+        global.Lightning.strike(3, { x: r.left, y: r.top, w: r.width, h: r.height });
+        View.rimFlash(3);
+        View.impactShake();
+        View.dealerCheer(2);
+      }
+      global.FX.banner('BLIND ALL-IN!', '안 봤다 올인', { cls: 'win', duration: 1800 });
+      Sound.bolt(3);
+      Haptic.fire([60, 50, 110, 50, 180]);
+      this.toast('BLIND ALL-IN! 승리 시 +50% 보너스');
+      this.heroAction('raise', o.maxTo);
+    },
+
     /* --------------------------------------------------------------- GM */
     gmOpen() {
-      if (this.gmUnlocked) { this.renderGm(); $('#modal-gm').classList.add('on'); return; }
-      $('#gm-pin').value = '';
-      $('#gm-pin-err').textContent = '';
-      $('#modal-gm-pin').classList.add('on');
-      setTimeout(function () { const el = $('#gm-pin'); if (el) el.focus(); }, 200);
+      const Auth = global.HoldemAuth;
+      if (!Auth.isAdmin()) {
+        this.toast('운영자 계정으로 로그인해야 쓸 수 있어');
+        Sound.fold();
+        return;
+      }
+      if (!this.gmUnlocked) this.gmUnlocked = true;
+      this.renderGm();
+      this.renderGmPlayers();
+      $('#modal-gm').classList.add('on');
+    },
+
+    /* 운영자 모드 ON/OFF 토글 */
+    setGmMode(on) {
+      const Auth = global.HoldemAuth;
+      if (!Auth.isAdmin()) {
+        this.toast('운영자 계정으로 로그인해야 해');
+        return;
+      }
+      this.gmUnlocked = !!on;
+      if (on) {
+        document.body.classList.add('gm-visible');
+        $('#btn-gm').classList.add('on');
+        Sound.fanfare(0);
+        this.toast('운영자 모드 ON — 플레이어 조회·칩 관리 사용 가능');
+        this.renderGmPlayers();
+        if (this.snap) this.refreshView();
+        $('#modal-gm').classList.add('on');
+      } else {
+        this.gmPeek = false;
+        this.gmBoard = false;
+        this.auto = false;
+        document.body.classList.add('admin-account');   // 버튼은 남겨 다시 켤 수 있게
+        $('#btn-gm').classList.remove('on');
+        $('#modal-gm').classList.remove('on');
+        if (this.mp) { this.mp.gmPeek = false; this.mp.gmBoard = false; }
+        if (this.snap) this.refreshView();
+        this.toast('운영자 모드 OFF');
+      }
+      this.renderGm();
+      Sound.tap();
     },
 
     gmTryUnlock() {
       const v = ($('#gm-pin').value || '').trim();
+      if (!global.HoldemAuth.isAdmin()) {
+        $('#gm-pin-err').textContent = '운영자 계정으로 로그인해';
+        return;
+      }
       if (v === (Pr.data.gmPin || '7073')) {
         this.gmUnlocked = true;
         document.body.classList.add('gm-visible');
@@ -572,6 +1321,7 @@
         $('#btn-gm').classList.add('on');
         Sound.fanfare(0);
         this.renderGm();
+        this.renderGmPlayers();
         $('#modal-gm').classList.add('on');
       } else {
         $('#gm-pin-err').textContent = 'PIN이 틀렸어';
@@ -590,6 +1340,120 @@
       const sp = $('#gm-speed b');
       if (sp) sp.textContent = Pr.data.speed === 'fast' ? '빠름' : '보통';
       $$('#gm-auto-grade button').forEach(function (x) { x.classList.toggle('on', x.dataset.g === App.autoGrade); });
+      const mode = $('#gm-mode');
+      if (mode) {
+        mode.textContent = this.gmUnlocked ? 'ON' : 'OFF';
+        mode.classList.toggle('off', !this.gmUnlocked);
+      }
+      const mg = $('#menu-gm b');
+      if (mg) mg.textContent = this.gmUnlocked ? 'ON' : 'OFF';
+    },
+
+    /* ------------------------------------------- 운영자: 플레이어 정보 조회 */
+    renderGmPlayers() {
+      const wrap = $('#gm-players');
+      if (!wrap) return;
+      const Auth = global.HoldemAuth;
+      const SUITS = ['♠', '♥', '♦', '♣'];
+      const self = this;
+      const fmt = C.fmt;
+      const cardsTxt = function (hole) {
+        if (!hole || !hole.length) return '—';
+        return hole.map(function (c) { return P.RANK_STR[c.r] + SUITS[c.s]; }).join(' ');
+      };
+      const handTxt = function (hole, board) {
+        if (!hole || hole.length < 2) return '';
+        if (!board || board.length < 3) return '';
+        const ev = P.evaluate(hole.concat(board));
+        return ev ? (P.CAT_KO[ev.cat] || '') : '';
+      };
+      const rows = [];
+
+      /* 1) 지금 테이블에 앉은 플레이어 (엔진/스냅샷) */
+      const seats = this.engine ? this.engine.seats
+        : (this.snap && this.snap.seats ? this.snap.seats : []);
+      const board = this.engine ? this.engine.board : (this.snap ? this.snap.board : []);
+      if (seats && seats.length) {
+        seats.forEach(function (s) {
+          const isHero = s.isHero || (this.snap && this.snap.you === s.idx) || s.idx === 0;
+          const isHuman = !!(isHero || s.remote);
+          const gKo = s.grade && global.PokerAI ? (global.PokerAI.GRADE_KO[s.grade] || '') : '';
+          const hn = handTxt(s.hole, board);
+          rows.push(
+            '<div class="gm-player' + (isHero ? ' me' : '') + '">' +
+              '<div class="gp-top"><b>' + (s.name || '플레이어') + '</b>' +
+                '<span class="gp-badge ' + (isHuman ? '' : 'ai') + '">' + (isHuman ? '실제 유저' : ('AI · ' + (gKo || '초보'))) + '</span>' +
+                '<span class="gp-chips">' + fmt(s.stack) + '</span></div>' +
+              '<div class="gp-meta">' +
+                '<span>테이블 스택</span>' +
+                (s.lastAction ? '<span>' + s.lastAction + '</span>' : '') +
+                (hn ? '<span class="gp-hand">' + hn + '</span>' : '') +
+                '<span class="gp-hand">' + cardsTxt(s.hole) + '</span>' +
+              '</div>' +
+              '<div class="gp-actions">' +
+                '<button class="gp-plus" type="button" data-kind="seat" data-key="' + s.idx + '" data-grant="10000">+10K</button>' +
+                '<button class="gp-minus" type="button" data-kind="seat" data-key="' + s.idx + '" data-grant="-10000">-10K</button>' +
+              '</div>' +
+            '</div>'
+          );
+        }, this);
+      }
+
+      /* 2) 가입된 계정 전체 */
+      const accts = Auth.summary();
+      const me = Auth.current();
+      const meSeat = this.engine ? this.engine.seats[0] : (this.snap ? this.snap.seats[this.snap.you] : null);
+      accts.forEach(function (a) {
+        const isMe = me && me.id === a.id;
+        const hn = isMe && meSeat ? handTxt(meSeat.hole, board) : '';
+        rows.push(
+          '<div class="gm-player' + (a.online ? ' online' : '') + (isMe ? ' me' : '') + '">' +
+            '<div class="gp-top"><b>' + a.nick + '</b>' +
+              '<span class="gp-badge">실제 유저</span>' +
+              (a.role === 'admin' ? '<span class="gp-badge admin">운영자</span>' : a.guest ? '<span class="gp-badge">게스트</span>' : '') +
+              (a.online ? '<span class="gp-badge">접속중</span>' : '') +
+              '<span class="gp-chips">' + fmt(a.chips) + '</span></div>' +
+            '<div class="gp-meta">' +
+              '<span>VIP ' + a.tier + '</span>' +
+              '<span>' + a.wins + '승 / ' + a.hands + '판 (' + a.winRate + '%)</span>' +
+              (isMe && hn ? '<span class="gp-hand">현재 ' + hn + '</span>' : '') +
+              (isMe && meSeat ? '<span class="gp-hand">' + cardsTxt(meSeat.hole) + '</span>' : '<span>손패 —</span>') +
+            '</div>' +
+            '<div class="gp-actions">' +
+              '<button class="gp-plus" type="button" data-kind="account" data-key="' + a.id + '" data-grant="10000">+10K</button>' +
+              '<button class="gp-minus" type="button" data-kind="account" data-key="' + a.id + '" data-grant="-10000">-10K</button>' +
+            '</div>' +
+          '</div>'
+        );
+      });
+
+      wrap.innerHTML = rows.join('') || '<div class="receipt-empty">플레이어가 없어</div>';
+      const foot = $('#gm-players-foot');
+      if (foot) {
+        foot.textContent = '계정 ' + accts.length + '개 · 테이블 ' + (seats ? seats.length : 0) + '명 · [AI · 등급] / [실제 유저] 배지는 운영자에게만 보여';
+      }
+    },
+
+    gmPlayerGrant(kind, key, amount) {
+      const Auth = global.HoldemAuth;
+      const amt = Math.round(amount || 0);
+      if (!amt) return;
+      if (kind === 'seat') {
+        const e = this.engine;
+        if (!e || !e.seats[+key]) { this.toast('테이블 진행 중에만 칩을 바꿀 수 있어'); return; }
+        const s = e.seats[+key];
+        s.stack = Math.max(0, s.stack + amt);
+        if (+key === 0 && this.mode === 'single') Pr.setBankroll(this.baseWallet + s.stack);
+        if (this.snap) this.onSnapshot({});
+      } else {
+        const next = Auth.adjustChips(key, amt);
+        if (next == null) { this.toast('계정을 찾을 수 없어'); return; }
+        if (Auth.current() && Auth.current().id === key) this.renderLobby();
+      }
+      this.toast((amt > 0 ? '+' : '') + full(amt) + ' 칩 ' + (amt > 0 ? '지급' : '차감'));
+      Sound.chip(0, 4);
+      this.renderGmPlayers();
+      if (this.snap) this.refreshView();
     },
 
     gmTogglePeek() {
@@ -908,6 +1772,156 @@
       });
     },
 
+    /* ------------------------------------------------------- 헤즈업 1:1 */
+    openHeadsUp() {
+      this.renderHeadsUp();
+      $('#modal-headsup').classList.add('on');
+      Sound.tap();
+    },
+
+    renderHeadsUp() {
+      const bb = +(this.huBlinds.split('/')[1] || 50);
+      const el = $('#hu-buyin');
+      if (el) el.textContent = '바이인 ' + C.fmt(bb * 100) + '칩 · 2인 테이블 · 버튼=SB';
+    },
+
+    async startHeadsUpWith(grade, sb, bb) {
+      const buyIn = bb * 100;
+      const charge = this.gmUnlocked ? 0 : buyIn;
+      if (Pr.data.bankroll < charge) {
+        this.toast('바이인 ' + C.fmt(buyIn) + ' 필요 · 뱅크롤이 부족해');
+        Sound.fold();
+        return;
+      }
+      Sound.resume();
+      this.mode = 'headsup';
+      this.lastRoomId = null;
+      this.room = { id: 'headsup', name: '헤즈업 1:1 · ' + (global.PokerAI.GRADE_KO[grade] || grade), sb: sb, bb: bb };
+      this.size = 2; this.buyIn = buyIn;
+      this.baseWallet = Pr.data.bankroll - charge;
+      Pr.setBankroll(this.baseWallet);
+      this.heroStats = { hands: 0, vpip: 0, pfr: 0, foldToBet: 0, foldOpps: 0 };
+      this.tournament = null;
+      const title = Pr.equippedTitle();
+      const players = [
+        { name: Pr.data.name || '주호', grade: 'human', isHero: true, stack: buyIn, title: title ? title.name : null, avatar: '🎯' },
+        { name: AI_NAMES[0] + ' · 1:1', grade: grade, stack: buyIn, avatar: '🦈' }
+      ];
+      this.engine = new P.Holdem({ seatCount: 2, smallBlind: sb, bigBlind: bb, players: players });
+      if (this._rig) { this.engine.riggedDeck = this._rig; this.engine.dealer = 1; this._rig = null; }
+      this.setupRunner();
+      this.enterGameScreen(this.room, 2);
+      this.running = true;
+      this.toast('헤즈업 시작 · 버튼=SB / 프리플랍 SB 선액션');
+      this.loop();
+    },
+
+    startFriendHeadsUp() {
+      $('#modal-headsup').classList.remove('on');
+      $$('#lobby-tabs .tab').forEach(function (x) { x.classList.remove('active'); });
+      const tab = $('.tab[data-tab="multi"]');
+      if (tab) tab.classList.add('active');
+      $$('.pane').forEach(function (p) { p.classList.remove('active'); });
+      $('#pane-multi').classList.add('active');
+      $$('#mp-size button').forEach(function (b) { b.classList.toggle('on', b.dataset.size === '2'); });
+      this.toast('친구 1:1 — 방을 만들고 코드를 공유해');
+    },
+
+    /* --------------------------------------------------------- 랭크겜(LP) */
+    openRanked() {
+      this.renderRanked();
+      $('#modal-ranked').classList.add('on');
+      Sound.tap();
+    },
+
+    renderRanked() {
+      const r = Pr.rank(), nxt = Pr.nextRank();
+      const hero = $('#rank-hero');
+      if (hero) {
+        hero.innerHTML =
+          '<div class="rank-badge" style="background:' + r.color + '">' + r.icon + '</div>' +
+          '<div><b>' + r.name + '</b><span>시즌 ' + Pr.data.lp + 'LP · ' + Pr.data.rankedWins + '승 ' + Pr.data.rankedLosses + '패</span></div>' +
+          '<div class="rank-lp">' + Pr.data.lp + '<span style="font-size:9px;color:#8fb0cc"> LP</span></div>';
+      }
+      const fill = $('#rank-bar-fill');
+      if (fill) fill.style.width = Math.round(Pr.rankProgress() * 100) + '%';
+      const nx = $('#rank-next');
+      if (nx) nx.textContent = nxt ? (nxt.name + '까지 ' + Math.max(0, nxt.min - Pr.data.lp) + ' LP') : '최고 티어 달성 — 그랜드마스터!';
+
+      const board = $('#rankboard-list');
+      if (!board) return;
+      const Auth = global.HoldemAuth;
+      const rows = Auth.summary().slice().sort(function (a, b) { return b.lp - a.lp; });
+      const me = Auth.current();
+      board.innerHTML = rows.length ? rows.map(function (a, i) {
+        const tier = (global.RANKS || []).reduce(function (m, x) { return a.lp >= x.min ? x : m; }, global.RANKS[0]);
+        return '<div class="rank-row2' + (me && me.id === a.id ? ' me' : '') + '">' +
+          '<span class="rb-no">' + (i + 1) + '</span>' +
+          '<span class="rb-nick">' + a.nick + '</span>' +
+          '<span class="rb-tier" style="color:' + tier.color + ';background:' + tier.color + '22">' + tier.name + '</span>' +
+          '<span class="rb-lp">' + a.lp + ' LP</span>' +
+        '</div>';
+      }).join('') : '<div class="receipt-empty">아직 랭커가 없어 — 첫 시즌을 열어보자</div>';
+    },
+
+    renderRankChip() {
+      const el = $('#g-rank');
+      if (!el) return;
+      if (this.mode === 'ranked') {
+        const r = Pr.rank();
+        el.classList.add('on');
+        el.textContent = r.icon + ' ' + r.name + ' ' + Pr.data.lp + 'LP';
+        el.style.color = r.color;
+        el.style.borderColor = r.color;
+        el.style.boxShadow = '0 0 12px ' + r.color + '55';
+      } else {
+        el.classList.remove('on');
+        el.textContent = '';
+      }
+    },
+
+    /* 랭크 티어별 상대 실력 분포 — 사람이 비지 않게 항상 5명 배치 */
+    rankGrades() {
+      const table = [
+        ['newbie', 'newbie', 'beginner', 'newbie', 'beginner'],     // 브론즈
+        ['beginner', 'beginner', 'expert', 'beginner', 'expert'],   // 실버
+        ['expert', 'expert', 'beginner', 'expert', 'pro'],          // 골드
+        ['expert', 'pro', 'expert', 'pro', 'expert'],               // 플래티넘
+        ['pro', 'pro', 'expert', 'pro', 'pro'],                     // 다이아
+        ['pro', 'pro', 'pro', 'expert', 'pro'],                     // 마스터
+        ['pro', 'pro', 'pro', 'pro', 'pro']                         // 그랜드마스터
+      ];
+      return table[Math.min(table.length - 1, Pr.rankIndex())] || table[0];
+    },
+
+    async startRanked() {
+      const buyIn = 10000;
+      const charge = this.gmUnlocked ? 0 : buyIn;
+      if (Pr.data.bankroll < charge) {
+        this.toast('랭크겜 바이인 ' + C.fmt(buyIn) + ' 필요');
+        Sound.fold();
+        return;
+      }
+      Sound.resume();
+      this.mode = 'ranked';
+      this.lastRoomId = 'newbie';
+      this.room = { id: 'ranked', name: '랭크겜 · ' + Pr.rank().name, sb: 50, bb: 100 };
+      this.size = 6; this.buyIn = buyIn;
+      this.baseWallet = Pr.data.bankroll - charge;
+      Pr.setBankroll(this.baseWallet);
+      this.heroStats = { hands: 0, vpip: 0, pfr: 0, foldToBet: 0, foldOpps: 0 };
+      this.tournament = null;
+      const grades = this.rankGrades();
+      const players = this.makePlayers({ grades: grades }, 6, buyIn);
+      this.engine = new P.Holdem({ seatCount: 6, smallBlind: 50, bigBlind: 100, players: players });
+      if (this._rig) { this.engine.riggedDeck = this._rig; this.engine.dealer = 5; this._rig = null; }
+      this.setupRunner();
+      this.enterGameScreen(this.room, 6);
+      this.running = true;
+      this.toast('랭크겜 시작 · 승리 시 +LP, 패배 시 -LP');
+      this.loop();
+    },
+
     async startSpectate() {
       Sound.resume();
       this.mode = 'spectate';
@@ -941,6 +1955,11 @@
       $('#screen-game').classList.add('active');
       $('#g-room').textContent = room.name + (this.mode === 'tournament' ? ' Lv.' + (this.tournament.level + 1) : '');
       $('#g-blinds').textContent = this.engine.sb + ' / ' + this.engine.bb;
+      this.renderRankChip();
+      this.boostDouble = false;
+      this.blindAllInPending = false;
+      this.riskActive = false;
+      this.refreshBoostUI();
       View.handFxDone = 0;
       View.prev = null;
       View._sig = undefined;
@@ -960,6 +1979,7 @@
       if (snap.result) this.lastResult = snap.result;
       View.render(snap);
       if (meta && meta.action) View.fxAction(snap, meta);
+      if (meta && meta.action === 'allin' && meta.actionSeat === 0) Pr.addPassXP(15);
       this.updateActionBar(snap);
       $('#g-blinds').textContent = this.engine.sb + ' / ' + this.engine.bb;
       if (this.mode === 'tournament') {
@@ -970,7 +1990,8 @@
     onHumanTurn(options) {
       this.options = options;
       const snap = this.snap;
-      if (snap && !View.heroRevealed) setTimeout(function () { View.revealHeroCards(true); }, 120);
+      const canBlind = !!(snap && snap.street === 'preflop' && Pr.boosterCount('blind') > 0 && !View.heroRevealed);
+      if (snap && !View.heroRevealed && !canBlind) setTimeout(function () { View.revealHeroCards(true); }, 120);
       if (!this.auto) Haptic.fire(35);
       if (this.auto) {
         this.updateActionBar(this.snap);
@@ -1014,6 +2035,7 @@
       const o = snap.options;
       const call = $('#btn-call');
       call.textContent = o.toCall > 0 ? '콜 ' + C.fmt(o.toCall) : '체크';
+      call.dataset.mode = o.toCall > 0 ? 'call' : 'check';
       const dis = !!you.allIn;
       $('#btn-fold').disabled = dis;
       call.disabled = dis;
@@ -1029,6 +2051,7 @@
       this.updateRaiseLabel();
       const disabled = !o.canRaise;
       $$('#action-bar .quick button').forEach(function (b) { b.disabled = disabled; });
+      this.refreshBoostUI();
     },
 
     updateRaiseLabel() {
@@ -1116,6 +2139,7 @@
         await sleep(this.runner.ms(1500, 700));
         if (!Pr.data.speed) {}
         if (this.mode === 'single' && this.heroStack() < this.engine.bb) break;
+        if ((this.mode === 'headsup' || this.mode === 'ranked') && this.heroStack() < this.engine.bb) break;
       }
     },
 
@@ -1129,8 +2153,42 @@
     afterHand(res) {
       this.preAction = null;
       this.renderPreRow();
+      /* 부스터 정산 — 2X WIN / BLIND ALL-IN 보너스 */
+      const winAmt = (res && res.results)
+        ? res.results.filter(function (r) { return r.seat === 0; }).reduce(function (s, r) { return s + (r.amount || 0); }, 0)
+        : 0;
+      let bonus = 0;
+      if (this.boostDouble && winAmt > 0) {
+        bonus += winAmt;
+        global.FX.banner('2X WIN!', '+' + C.fmt(winAmt), { cls: 'win', duration: 1900 });
+        Sound.trophy();
+      }
+      if (this.blindAllInPending) {
+        if (winAmt > 0) {
+          const extra = Math.round(winAmt * 0.5);
+          bonus += extra;
+          global.FX.banner('BLIND ALL-IN!', '+' + C.fmt(extra) + ' 보너스', { cls: 'win', duration: 2000 });
+        }
+        this.blindAllInPending = false;
+      }
+      if (this.riskActive) {
+        if (winAmt > 0) {
+          bonus += winAmt;
+          global.FX.banner('2X RISK WIN!', '+' + C.fmt(winAmt), { cls: 'win', duration: 2000 });
+        } else if (this.engine) {
+          const committed = Math.max(0, this.engine.seats[0].committed || 0);
+          if (committed > 0) {
+            this.engine.seats[0].stack = Math.max(0, this.engine.seats[0].stack - committed);
+            global.FX.banner('2X RISK LOSS', '-' + C.fmt(committed), { cls: 'split', duration: 2000 });
+          }
+        }
+        this.riskActive = false;
+      }
+      if (bonus > 0 && this.engine) this.engine.seats[0].stack += bonus;
+      this.boostDouble = false;
+      this.refreshBoostUI();
       const stack = this.heroStack();
-      if (this.mode === 'single') {
+      if (this.mode === 'single' || this.mode === 'headsup' || this.mode === 'ranked') {
         Pr.setBankroll(this.baseWallet + stack);
         // AI 리바이
         for (let i = 1; i < this.engine.seats.length; i++) {
@@ -1147,6 +2205,23 @@
         if (this.handStats.pfr) this.heroStats.pfr++;
         this.heroStats.foldToBet += this.handStats.foldToBet;
         this.heroStats.foldOpps += this.handStats.foldOpps;
+
+        if (this.mode === 'ranked') {
+          const delta = won ? (showdown ? 22 : 16) : (showdown ? -12 : -8);
+          const rr = Pr.addLP(delta);
+          this.renderRankChip();
+          this.toast((delta > 0 ? '+' : '') + delta + ' LP · ' + rr.after.name + ' ' + rr.lp + 'LP');
+          if (delta > 0 && rr.before !== rr.after) {
+            Pr.addVip(50);
+            global.FX.banner('RANK UP!', rr.after.name, { cls: 'win', duration: 2400 });
+            global.FX.confettiBurst(innerWidth / 2, innerHeight * 0.3, 70);
+            Sound.trophy();
+            Haptic.fire([40, 40, 90, 40, 120]);
+          }
+        }
+        if (this.mode === 'headsup') {
+          if (won) { Pr.data.headsUpWins = (Pr.data.headsUpWins || 0) + 1; Pr.addVip(10); }
+        }
         this.renderLobby();
         if (stack < this.engine.bb) {
           this.running = false;
@@ -1157,7 +2232,7 @@
         const alive = this.engine.seats.filter(function (s) { return s.stack > 0; });
         if (this.engine.seats[0].stack <= 0) {
           this.running = false;
-          this.showBust(true);
+          this.tournamentEliminated();
           return;
         }
         if (alive.length === 1 && alive[0].idx === 0) {
@@ -1170,6 +2245,10 @@
           const sb = Math.round(this.tournament.baseSb * Math.pow(1.5, this.tournament.level) / 5) * 5;
           this.engine.sb = sb; this.engine.bb = sb * 2;
           this.toast('블라인드 업 · ' + sb + ' / ' + sb * 2);
+          if (global.FX) {
+            global.FX.banner('BLIND UP!', sb + ' / ' + sb * 2, { cls: 'win', duration: 1500 });
+            global.FX.streetBanner('BLIND UP', 2);
+          }
           $('#g-blinds').textContent = sb + ' / ' + sb * 2;
           $('#g-room').textContent = this.room.name + ' Lv.' + (this.tournament.level + 1);
           Sound.check(0);
@@ -1204,12 +2283,13 @@
       this.gmPeek = false;
       if (this.runner) this.runner.stop();
       if (this.mode && this.mode.indexOf('mp') === 0 && this.mp) { this.mp.close(); this.mp = null; }
-      if (this.mode === 'single' || this.mode === 'tournament') {
+      if (this.mode === 'single' || this.mode === 'tournament' || this.mode === 'headsup' || this.mode === 'ranked') {
         // 남은 스택 정산
-        if (this.engine && this.mode === 'single') Pr.setBankroll(this.baseWallet + this.heroStack());
+        if (this.engine && this.mode !== 'tournament') Pr.setBankroll(this.baseWallet + this.heroStack());
       }
       this.engine = null; this.runner = null; this.snap = null; this.options = null;
       this.mode = null;
+      this.renderRankChip();
       global.FX.clear();
       $('#screen-game').classList.remove('active');
       $('#screen-lobby').classList.add('active');
@@ -1219,7 +2299,6 @@
 
     /* --------------------------------------------------------- 토너먼트 */
     startTournament() {
-      if (Pr.tierIndex() < 1) { this.toast('토너먼트는 실버 등급부터 참가 가능'); Sound.fold(); return; }
       const buyIn = 5000;
       if (Pr.data.bankroll < buyIn) { this.toast('참가비 ' + C.fmt(buyIn) + ' 부족'); return; }
       Sound.resume();
@@ -1240,18 +2319,41 @@
     },
 
     tournamentWin() {
-      const prize = this.tournament.prize;
+      const prize = Math.round(this.tournament.prize * 0.6);
       Pr.addChips(prize);
+      Pr.addVip(100);
       Pr.recordTournamentWin();
+      Pr.data.tournamentBest = Math.max(Pr.data.tournamentBest || 0, 3);
+      Pr.save();
       const before = Pr.data.tournamentsWon;
       Sound.trophy();
       global.FX.coinShower(innerWidth / 2, innerHeight * 0.4, innerWidth * 0.8, 60);
       global.FX.confettiBurst(innerWidth / 2, innerHeight * 0.35, 90);
       $('#victory-title').textContent = '토너먼트 우승! 🏆';
-      let extra = '';
-      if (before === 1) extra = '<br><b style="color:#ffd98a">칭호 「WSOP 루키」 해금!</b>';
-      if (before === 3) extra = '<br><b style="color:#ffd98a">칭호 「홀덤 황제」 해금!</b>';
-      $('#victory-desc').innerHTML = '상금 <b style="color:#ffd98a">' + C.fmt(prize) + '</b> 획득!' + extra;
+      let extra = '<br><b style="color:#7ef7ff">VIP +100P</b>';
+      if (before === 1) extra += '<br><b style="color:#ffd98a">칭호 「WSOP 루키」 해금!</b>';
+      if (before === 3) extra += '<br><b style="color:#ffd98a">칭호 「홀덤 황제」 해금!</b>';
+      $('#victory-desc').innerHTML = '1위 · 상금 <b style="color:#ffd98a">' + C.fmt(prize) + '</b> 획득!' + extra;
+      $('#modal-victory').classList.add('on');
+      this.renderLobby();
+    },
+
+    /* 토너먼트 탈락 — 1~3등 상금 + VIP 포인트 */
+    tournamentEliminated() {
+      const othersAlive = this.engine.seats.filter(function (s) { return s.idx !== 0 && s.stack > 0; }).length;
+      const place = Math.max(2, Math.min(6, othersAlive + 1));
+      const pool = this.tournament ? this.tournament.prize : 0;
+      const table = [0, Math.round(pool * 0.6), Math.round(pool * 0.25), Math.round(pool * 0.15)];
+      const prize = place <= 3 ? table[place] : 0;
+      const vip = place === 2 ? 60 : place === 3 ? 30 : 10;
+      if (prize > 0) Pr.addChips(prize);
+      Pr.addVip(vip);
+      Pr.data.tournamentBest = Math.max(Pr.data.tournamentBest || 0, 4 - place);
+      Pr.save();
+      Sound.lose();
+      $('#victory-title').textContent = '토너먼트 ' + place + '위';
+      $('#victory-desc').innerHTML = (prize ? '상금 <b style="color:#ffd98a">' + C.fmt(prize) + '</b> 획득! · ' : '아쉽다! ') +
+        '<b style="color:#7ef7ff">VIP +' + vip + 'P</b><br>다음 판에 다시 도전!';
       $('#modal-victory').classList.add('on');
       this.renderLobby();
     },
@@ -1298,9 +2400,9 @@
     },
 
     /* ------------------------------------------------------------- 멀티 */
-    mpCreate() {
+    mpCreate(sizeOverride) {
       const name = ($('#mp-name').value || Pr.data.name || '호스트').slice(0, 10);
-      const size = +($('#mp-size .on') || {}).dataset ? +$('#mp-size .on').dataset.size : 6;
+      const size = sizeOverride || (+($('#mp-size .on') || {}).dataset ? +$('#mp-size .on').dataset.size : 6);
       const roomId = ($('#mp-blinds .on') || {}).dataset ? $('#mp-blinds .on').dataset.room : 'newbie';
       const room = Pr.room(roomId);
       const fill = $('#mp-fill .on') ? $('#mp-fill .on').dataset.grade : 'expert';
@@ -1342,6 +2444,7 @@
         code: o.code,
         name: o.name,
         title: Pr.equippedTitle() ? Pr.equippedTitle().name : null,
+        account: global.HoldemAuth.syncPayload(),
         transport: o.transport,
         relayUrl: $('#mp-relay').value.trim(),
         size: o.size || 6,
@@ -1392,7 +2495,7 @@
         el.innerHTML =
           '<span class="ms-num">' + (s.seat + 1) + '</span>' +
           '<span class="ms-name">' + (s.name || '') + (s.title ? ' · ' + s.title : '') + '</span>' +
-          '<span class="ms-tag">' + (s.host ? '호스트' : s.ai ? ('AI ' + (global.PokerAI.GRADE_KO[s.grade] || '')) : (s.connected ? '참가' : '연결 끊김')) + '</span>';
+          '<span class="ms-tag">' + (s.host ? '호스트' : s.ai ? '대기' : (s.connected ? '참가' : '연결 끊김')) + (s.account && s.account.tier ? ' · ' + s.account.tier : '') + '</span>';
         wrap.appendChild(el);
       });
       if (isHost) {
@@ -1458,9 +2561,9 @@
     return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
   }
   function feltBg(id) {
-    if (id === 'crimson') return 'radial-gradient(circle at 50% 40%, #8c1730, #40060f 75%)';
-    if (id === 'midnight') return 'radial-gradient(circle at 50% 40%, #22386b, #070c1c 75%)';
-    return 'radial-gradient(circle at 50% 40%, #127d55, #063726 75%)';
+    if (id === 'crimson') return 'radial-gradient(circle at 50% 40%, #5c0040, #17001c 75%)';
+    if (id === 'midnight') return 'radial-gradient(circle at 50% 40%, #1b2a80, #04060f 75%)';
+    return 'radial-gradient(circle at 50% 40%, #2a1060, #06010f 75%)';
   }
 
   global.App = App;

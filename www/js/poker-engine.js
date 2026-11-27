@@ -156,9 +156,10 @@
     const a = hole[0], b = hole[1];
     const hi = Math.max(a.r, b.r), lo = Math.min(a.r, b.r);
     const suited = a.s === b.s;
-    if (a.r === b.r) return RANK_STR[a.r] + RANK_STR[a.r] + ' · ' + RANK_KO[a.r] + ' 페어';
+    const SH = function (r) { return r === 10 ? 'T' : RANK_STR[r]; };
+    if (a.r === b.r) return SH(a.r) + SH(a.r) + ' · ' + RANK_KO[a.r] + ' 페어';
     const tag = suited ? '수딧' : '오프수트';
-    return RANK_STR[hi] + RANK_STR[lo] + (suited ? 's' : 'o') + ' · ' + RANK_KO[hi] + ' ' + RANK_KO[lo] + ' ' + tag;
+    return SH(hi) + SH(lo) + (suited ? 's' : 'o') + ' · ' + RANK_KO[hi] + ' ' + RANK_KO[lo] + ' ' + tag;
   }
 
   function describeHole(hole, board) {

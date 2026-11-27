@@ -6,7 +6,7 @@
 (function (global) {
   'use strict';
 
-  const AI_NAMES = ['카드샤크', '럭키제이', '벳사이즈', '리버퀸', '올인맥스', '타이트준', '슬로우플레이', '포커페이스'];
+  const AI_NAMES = ['한강타짜', '블러핑장인', '포커페이스99', '리버헌터', '칩리더', '올인스타', '슬로우롤', '매버릭'];
   const AVATARS = ['🦈', '🐺', '🦊', '🐯', '🦁', '🐻', '🐲', '🐼'];
 
   function MPSession(opts) {
@@ -15,6 +15,7 @@
     this.code = String(this.opts.code || '');
     this.name = this.opts.name || '플레이어';
     this.title = this.opts.title || null;
+    this.account = this.opts.account || null;   // {id, nick, tier, chips, role}
     this.transport = this.opts.transport || 'bc';
     this.relayUrl = this.opts.relayUrl || '';
     this.size = this.opts.size || 6;
@@ -49,7 +50,10 @@
           self.h('onStatus', st, detail);
           return;
         }
-        if (st === 'open') self.connected = true;
+        if (st === 'open') {
+          self.connected = true;
+          if (self.account) self.net.send(null, { t: 'accountSync', profile: self.account });
+        }
         self.h('onStatus', st, detail);
         if (st === 'open' && self.role === 'client' && !self.joined) self.sendJoin();
       },
@@ -115,7 +119,7 @@
 
   MPSession.prototype.sendJoin = function () {
     if (this.role !== 'client') return;
-    this.net.send(null, { t: 'joinReq', name: this.name, title: this.title });
+    this.net.send(null, { t: 'joinReq', name: this.name, title: this.title, account: this.account });
     this.h('onStatus', 'joining');
   };
 
@@ -137,13 +141,13 @@
 
   MPSession.prototype.lobbyState = function () {
     const seats = [];
-    seats.push({ seat: 0, name: this.name, title: this.title, ai: false, host: true, connected: true });
+    seats.push({ seat: 0, name: this.name, title: this.title, ai: false, host: true, connected: true, account: this.account });
     this.clients.forEach(function (c) {
-      if (c.seat != null) seats.push({ seat: c.seat, name: c.name, title: c.title, ai: false, host: false, connected: c.connected });
+      if (c.seat != null) seats.push({ seat: c.seat, name: c.name, title: c.title, ai: false, host: false, connected: c.connected, account: c.account || null });
     });
     const list = seats.sort(function (a, b) { return a.seat - b.seat; });
     for (let i = 0; i < this.size; i++) {
-      if (!list.some(function (s) { return s.seat === i; })) list.push({ seat: i, name: 'AI · ' + this.fillGrade, ai: true, grade: this.fillGrade });
+      if (!list.some(function (s) { return s.seat === i; })) list.push({ seat: i, name: AI_NAMES[i % AI_NAMES.length], ai: true, grade: this.fillGrade });
     }
     list.sort(function (a, b) { return a.seat - b.seat; });
     return { t: 'lobby', code: this.code, size: this.size, seats: list, fillGrade: this.fillGrade, started: this.started, room: this.room.name };
@@ -259,11 +263,12 @@
       if (msg.t === 'joinReq') {
         let c = this.clients.get(from);
         if (!c) {
-          c = { id: from, seat: null, name: msg.name || '친구', title: msg.title || null, connected: true };
+          c = { id: from, seat: null, name: msg.name || '친구', title: msg.title || null, connected: true, account: msg.account || null };
           this.clients.set(from, c);
           this.assignSeats();
         } else {
           c.name = msg.name || c.name; c.title = msg.title || c.title; c.connected = true;
+          if (msg.account) c.account = msg.account;
         }
         this.broadcastLobby();
         if (this.started && c.seat != null) {

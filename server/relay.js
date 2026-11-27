@@ -134,6 +134,24 @@ function handleText(conn, text) {
   if (!m || typeof m !== 'object') return;
   const room = rooms.get(conn.meta.room);
   if (!room) return;
+
+  /* 계정 프로필 동기화 — 방 단위 명부(roster)에 보관하고 전원에게 브로드캐스트.
+     (영속 저장은 각 기기의 localStorage, 릴레이는 세션 중 공유만 담당) */
+  if (m.msg && m.msg.t === 'accountSync') {
+    room.roster = room.roster || new Map();
+    const p = m.msg.profile || {};
+    room.roster.set(conn.meta.id, {
+      id: conn.meta.id, name: conn.meta.name,
+      nick: p.nick || conn.meta.name, tier: p.tier || null,
+      chips: Number(p.chips || 0), hands: Number(p.hands || 0), wins: Number(p.wins || 0),
+      role: p.role || 'user', at: Date.now()
+    });
+    const outR = { from: 'server', msg: { t: 'accountSync', roster: [...room.roster.values()] } };
+    if (room.host && room.host.alive) room.host.sendJSON(outR);
+    room.clients.forEach((c) => c.sendJSON(outR));
+    return;
+  }
+
   const to = m.to;
   const out = { from: conn.meta.id, msg: m.msg };
 
@@ -200,6 +218,13 @@ const server = http.createServer((req, res) => {
   if (u.pathname === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ ok: true, rooms: rooms.size }));
+    return;
+  }
+  if (u.pathname === '/roster') {
+    const code = (u.searchParams.get('room') || '').slice(0, 8);
+    const room = rooms.get(code);
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, room: code, roster: room && room.roster ? [...room.roster.values()] : [] }));
     return;
   }
   res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
