@@ -1,0 +1,22 @@
+{
+  "appId": "com.juho.holdempoker",
+  "appName": "Real Holdem Poker",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": true,
+    "backgroundColor": "#05080a"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 800,
+      "backgroundColor": "#05080a",
+      "showSpinner": false
+    }
+  }
+}

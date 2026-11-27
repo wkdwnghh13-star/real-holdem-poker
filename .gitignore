@@ -1,0 +1,31 @@
+# ── 의존성 / 빌드 산출물 ─────────────────────────────
+node_modules/
+android/
+ios/
+out/
+*.apk
+*.aab
+.gradle/
+build/
+
+# ── 서명 키 (절대 커밋 금지) ────────────────────────
+*.keystore
+*.jks
+keystore.properties
+
+# ── 대용량/재생성 가능한 개발 자산 ──────────────────
+# art/ : 딜러 원본 이미지 19MB (tools/build_dealers.py 가 www/js/dealers.js + www/img/dealers 로 변환)
+#        APK 번들에는 들어가지 않으며(www 밖), 저장소에도 올리지 않습니다.
+art/
+# screenshots/ : tools/e2e.py 등이 만드는 검증용 캡처 (약 90MB)
+screenshots/
+
+# ── 임시 파일 ───────────────────────────────────────
+.mperr.txt
+.mpout.json
+.probe.py
+.quickcheck.py
+.shots.json
+*.log
+.DS_Store
+__pycache__/
