@@ -141,6 +141,10 @@ PORT=9000 npm run relay          # 포트 변경
 
 저장소: <https://github.com/wkdwnghh13-star/real-holdem-poker> (비공개)
 
+**최신 빌드 바로 받기:** <https://github.com/wkdwnghh13-star/real-holdem-poker/releases>
+- `real-holdem-poker-vX-debug.apk` — 휴대폰에 받아서 바로 설치(테스트용, 안드로이드 5.1+)
+- `real-holdem-poker-vX-release.aab` — 스토어 업로드용
+
 1. **Actions → Build Android APK & AAB → Run workflow** (산출물 선택: `both` / `apk` / `aab`)
 2. 실행이 끝나면 그 실행 화면 아래 **Artifacts** 에서 `real-holdem-apk` / `real-holdem-aab` 다운로드 (보관 30일)
 3. `v1.0.0` 같은 **태그를 push** 하면 같은 빌드가 **Releases** 에도 첨부되어 만료 없이 받을 수 있음
