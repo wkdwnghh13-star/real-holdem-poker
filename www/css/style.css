@@ -2655,3 +2655,288 @@ body[data-profile="gold_crown"] .seat[data-idx="0"] .avatar {
 .modal-card { max-height: calc(100vh - 28px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .modal-card::-webkit-scrollbar { width: 4px; }
 .modal-card::-webkit-scrollbar-thumb { background: rgba(0, 245, 255, .3); border-radius: 99px; }
+
+/* =============================================================================
+   ★★★ v7 — 1번 시안(holdem_arcade_1_neon.png) 화면 구도 재현 ★★★
+   네온 카지노 룸 배경 · 상단 JACKPOT/STORE HUD · 좌우 네온 위젯 ·
+   대형 딜러 포트레이트 · 네온 좌석 카드 · 4개 아케이드 버튼 + 슬라이더
+   ========================================================================== */
+/* ---------------------------------------------------------- 카지노 룸 배경 */
+#table-area { overflow: hidden; }
+.casino-room {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+  background:
+    radial-gradient(ellipse 62% 52% at 50% 4%, rgba(123, 43, 255, .3), transparent 70%),
+    radial-gradient(ellipse 40% 24% at 50% 100%, rgba(255, 43, 214, .18), transparent 72%),
+    linear-gradient(180deg, #120530 0%, #0a0320 42%, #04010d 100%);
+}
+.cr-bokeh { position: absolute; border-radius: 50%; filter: blur(16px); opacity: .62; mix-blend-mode: screen; }
+.cr-bokeh.b1 { width: 130px; height: 130px; left: -4%; top: 4%; background: radial-gradient(circle, #ff2bd6, transparent 70%); }
+.cr-bokeh.b2 { width: 100px; height: 100px; right: -3%; top: 2%; background: radial-gradient(circle, #00f5ff, transparent 70%); }
+.cr-bokeh.b3 { width: 74px; height: 74px; left: 5%; top: 40%; background: radial-gradient(circle, #7b2bff, transparent 70%); }
+.cr-bokeh.b4 { width: 118px; height: 118px; right: 3%; top: 36%; background: radial-gradient(circle, #ff8ae0, transparent 70%); }
+.cr-bokeh.b5 { width: 84px; height: 84px; left: 24%; top: 0%; background: radial-gradient(circle, #00c8ff, transparent 70%); }
+.cr-bokeh.b6 { width: 66px; height: 66px; right: 24%; top: 10%; background: radial-gradient(circle, #ffd166, transparent 70%); }
+.cr-sign { position: absolute; line-height: 1; opacity: .2; filter: drop-shadow(0 0 20px currentColor); font-family: serif; }
+.cr-sign.spade { left: 6%; top: 15%; font-size: 68px; color: #00f5ff; }
+.cr-sign.heart { right: 7%; top: 11%; font-size: 62px; color: #ff2bd6; }
+.cr-sign.diamond { left: 13%; bottom: 20%; font-size: 42px; color: #7b2bff; opacity: .15; }
+.cr-lights {
+  position: absolute; left: 0; right: 0; top: 0; height: 130px; opacity: .5;
+  background: repeating-linear-gradient(90deg, transparent 0 26px, rgba(0, 245, 255, .2) 26px 30px,
+    rgba(255, 43, 214, .16) 30px 34px, transparent 34px 62px);
+  -webkit-mask-image: linear-gradient(180deg, #000, transparent);
+  mask-image: linear-gradient(180deg, #000, transparent);
+}
+.cr-floor {
+  position: absolute; left: -25%; right: -25%; bottom: -12%; height: 46%;
+  background:
+    repeating-linear-gradient(90deg, rgba(0, 245, 255, .14) 0 1px, transparent 1px 36px),
+    repeating-linear-gradient(0deg, rgba(255, 43, 214, .1) 0 1px, transparent 1px 36px);
+  transform: perspective(320px) rotateX(64deg); transform-origin: 50% 100%; opacity: .5;
+}
+
+/* ------------------------------------------------------------- 상단 HUD */
+.jackpot-box {
+  display: flex; flex-direction: column; align-items: center; flex: none;
+  padding: 3px 9px 4px; border-radius: 9px;
+  background: linear-gradient(180deg, #3d0a4f, #170028);
+  border: 1.5px solid rgba(255, 43, 214, .8);
+  box-shadow: 0 0 14px rgba(255, 43, 214, .5), inset 0 1px 0 rgba(255, 180, 240, .3);
+}
+.jackpot-box span { font-size: 7px; letter-spacing: 1.6px; font-weight: 900; color: #ff9de8; }
+.jackpot-box b { font-size: 12px; font-weight: 900; color: #ffd166; text-shadow: 0 0 9px rgba(255, 180, 40, .8); font-variant-numeric: tabular-nums; }
+.chips-pill {
+  display: flex; align-items: center; gap: 3px; padding: 2px 3px 2px 7px; border-radius: 99px;
+  background: rgba(12, 6, 32, .88); border: 1px solid rgba(255, 193, 51, .5);
+  box-shadow: 0 0 10px rgba(255, 180, 40, .2);
+}
+.chips-pill span { font-size: 11px; }
+.chips-pill b { font-size: 10px; color: #ffd166; font-variant-numeric: tabular-nums; }
+.chips-pill button {
+  width: 18px; height: 18px; border-radius: 50%; font-size: 13px; font-weight: 900; line-height: 1;
+  color: #2a1200; background: linear-gradient(180deg, #ffe27a, #ff9a00);
+  box-shadow: 0 0 8px rgba(255, 170, 0, .6);
+}
+.store-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 0; padding: 2px 7px 3px; border-radius: 9px;
+  background: linear-gradient(180deg, #4a0a5e, #23002e);
+  border: 1px solid rgba(255, 43, 214, .65);
+  font-size: 7px; font-weight: 900; letter-spacing: .5px; color: #ffb0e6;
+  box-shadow: 0 0 12px rgba(255, 43, 214, .35);
+}
+.store-btn span { font-size: 12px; }
+
+/* --------------------------------------------------------- 좌우 네온 위젯 */
+.hud-widgets { position: absolute; inset: 0; z-index: 9; pointer-events: none; }
+.hud-w {
+  position: absolute; pointer-events: auto; width: 128px; text-align: left;
+  padding: 6px 9px 7px; border-radius: 12px;
+  background: linear-gradient(170deg, rgba(22, 7, 48, .93), rgba(8, 1, 22, .9));
+  border: 1.5px solid rgba(0, 245, 255, .55);
+  box-shadow: 0 0 14px rgba(0, 245, 255, .32), inset 0 0 14px rgba(0, 245, 255, .1);
+  backdrop-filter: blur(3px);
+}
+.hud-w b { display: block; font-family: var(--arcade-font); font-style: italic; font-size: 10px; letter-spacing: .5px; color: #9df9ff; }
+.hud-w i { display: block; font-style: normal; font-size: 7.5px; letter-spacing: 1.2px; color: #c39bff; margin-top: 1px; }
+.hud-w span { display: block; font-size: 8.5px; color: #8fb0cc; margin-top: 3px; font-weight: 700; }
+.hud-challenge { left: 8px; top: 8px; }
+.hud-highroller { right: 8px; top: 8px; border-color: rgba(255, 43, 214, .65); box-shadow: 0 0 14px rgba(255, 43, 214, .35), inset 0 0 14px rgba(255, 43, 214, .1); }
+.hud-highroller b { color: #ffb0e6; }
+.hud-sidequest { left: 8px; bottom: 92px; border-color: rgba(255, 43, 214, .55); }
+.hud-sidequest b { color: #ffb0e6; }
+.hud-daily { left: 8px; bottom: 30px; border-color: rgba(255, 193, 51, .6); }
+.hud-daily b { color: #ffd166; }
+.hud-cards { letter-spacing: 2px; color: #9df9ff !important; font-size: 9px !important; }
+.hud-bar { height: 4px; border-radius: 99px; background: rgba(120, 240, 255, .18); overflow: hidden; margin-top: 4px; }
+.hud-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #00f5ff, #ff2bd6); box-shadow: 0 0 8px rgba(0, 245, 255, .7); }
+.hud-timer { color: #ffd166 !important; font-variant-numeric: tabular-nums; }
+.hud-combo {
+  position: absolute; right: 10px; bottom: 30px; pointer-events: auto;
+  width: 82px; height: 82px; border-radius: 50%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 50% 38%, #ffe98a, #ff8a00 52%, #a01a00 100%);
+  border: 2px solid #fff3c0; transform: rotate(-8deg);
+  box-shadow: 0 0 26px rgba(255, 140, 0, .8), inset 0 0 18px rgba(255, 255, 255, .4);
+  animation: comboPulse 1.6s ease-in-out infinite;
+}
+.hud-combo b { font-family: var(--arcade-font); font-style: italic; font-size: 13px; color: #2a1200; }
+.hud-combo span { font-family: var(--arcade-font); font-style: italic; font-size: 23px; line-height: 1; color: #2a1200; }
+@keyframes comboPulse { 0%,100% { box-shadow: 0 0 22px rgba(255,140,0,.7), inset 0 0 18px rgba(255,255,255,.35); } 50% { box-shadow: 0 0 36px rgba(255,180,0,.95), inset 0 0 22px rgba(255,255,255,.55); } }
+
+/* --------------------------------------------------- 대형 딜러 포트레이트 */
+#table-area { --dealer-size: clamp(96px, 20.5vmin, 156px); }
+#dealer { top: -1%; z-index: 8; }
+#dealer .dl-frame {
+  width: var(--dealer-size);
+  height: calc(var(--dealer-size) * 1.16);
+  border-radius: 46% 46% 38% 38% / 32% 32% 68% 68%;
+  padding: 3px;
+}
+#dealer .dl-pic {
+  border-radius: inherit;
+  background-position: 50% 10%;
+  box-shadow: inset 0 0 26px rgba(0, 0, 0, .7), inset 0 -22px 30px rgba(6, 0, 18, .85);
+}
+#dealer .dl-tag { bottom: 2px; }
+#dealer .dl-frame::after { inset: -7px; border-radius: inherit; }
+#dealer::before {
+  top: 46%; width: 210%; height: 130%;
+  background: radial-gradient(ellipse at 50% 50%, rgba(255, 43, 214, .26), rgba(0, 245, 255, .16) 45%, transparent 70%);
+}
+
+/* 팟/보드/스트리트 배너 위치 — 대형 딜러 아래로 */
+#pot { top: 34%; }
+#board { top: 62%; }
+.street-banner { top: 45%; }
+
+/* 네온 좌석 카드 + VIP 배지 */
+.seat { width: 104px; }
+.seat-main {
+  width: 100%;
+  padding: 5px 7px 4px;
+  border-radius: 13px;
+  background: linear-gradient(170deg, rgba(24, 9, 52, .92), rgba(8, 2, 22, .88));
+  border: 1.5px solid rgba(0, 245, 255, .55);
+  box-shadow: 0 0 14px rgba(0, 245, 255, .3), inset 0 1px 0 rgba(150, 250, 255, .14);
+  backdrop-filter: blur(2px);
+}
+.seat.acting .seat-main { border-color: #fff; box-shadow: 0 0 22px rgba(0, 245, 255, .8), 0 0 40px rgba(255, 43, 214, .4); }
+.seat.folded .seat-main { opacity: .65; }
+.seat.winner .seat-main { border-color: #ffe27a; box-shadow: 0 0 26px rgba(255, 200, 60, .85); }
+.vip-badge {
+  position: absolute; right: -7px; top: -8px; z-index: 6;
+  font-size: 7px; font-weight: 900; letter-spacing: .3px; padding: 1.5px 5px; border-radius: 99px;
+  color: #2a1200; background: linear-gradient(180deg, #ffe27a, #ff9a00);
+  border: 1px solid rgba(255, 246, 200, .9); box-shadow: 0 0 8px rgba(255, 170, 0, .6);
+}
+.seat-meta { margin-top: 4px; }
+
+/* ------------------------------------------------------- 4버튼 + 스텝 버튼 */
+.btn-row { gap: 5px; }
+.act {
+  flex: 1; padding: 14px 3px; border-width: 2.5px; border-radius: 15px; font-size: 14.5px;
+  letter-spacing: .3px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.act.fold { flex: .92; }
+.act.check {
+  flex: .95;
+  background: linear-gradient(180deg, #9defff 0%, #1fa9ee 45%, #075a9c 100%);
+  color: #031a26; border-color: #d8fbff;
+  box-shadow: 0 0 20px rgba(0, 190, 255, .6), inset 0 3px 0 rgba(255, 255, 255, .65), inset 0 -5px 0 rgba(0, 50, 90, .55);
+}
+.act.call { flex: 1.05; }
+.act.raise { flex: 1.08; }
+.act:disabled { opacity: .5; }
+.step-btn {
+  flex: none; width: 27px; height: 27px; border-radius: 50%; font-size: 16px; font-weight: 900; line-height: 1;
+  color: #2a0022; background: linear-gradient(180deg, #ff9de8, #ff2bd6);
+  border: 1px solid #ffd0f4; box-shadow: 0 0 12px rgba(255, 43, 214, .6);
+}
+#raise-val { min-width: 52px; font-size: 12px; }
+
+/* 상점 팝업 */
+.store-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.store-item {
+  padding: 12px 10px; border-radius: 13px; text-align: left;
+  background: linear-gradient(170deg, rgba(0, 245, 255, .12), rgba(123, 43, 255, .14));
+  border: 1px solid rgba(0, 245, 255, .35);
+}
+.store-item .si-ico { font-size: 18px; display: block; }
+.store-item b { display: block; font-size: 12px; margin-top: 3px; color: #eafcff; }
+.store-item i { font-style: normal; font-size: 9px; color: #8ba2bd; }
+
+/* 반응형 — 좁은 화면에서는 위젯 축소/숨김 */
+@media (max-width: 620px) {
+  .hud-w { width: 102px; padding: 5px 7px 6px; }
+  .hud-w b { font-size: 8.5px; }
+  .hud-w i { font-size: 6.5px; letter-spacing: .6px; }
+  .hud-w span { font-size: 7.5px; }
+  .hud-sidequest { display: none; }
+  .hud-combo { width: 66px; height: 66px; right: 6px; }
+  .hud-combo b { font-size: 10px; }
+  .hud-combo span { font-size: 18px; }
+  .jackpot-box { padding: 2px 6px; }
+  .jackpot-box b { font-size: 10px; }
+  .chip-pill b, .chips-pill b { font-size: 9px; }
+  .store-btn { font-size: 6px; padding: 2px 5px; }
+  .store-btn span { font-size: 10px; }
+  .seat { width: 92px; }
+  .act { font-size: 12.5px; padding: 12px 2px; }
+}
+
+/* =============================================================================
+   ★ v7.2 — 큰 카드 & 레이어 정리
+   ========================================================================== */
+:root {
+  --card-board: clamp(48px, 15.5vmin, 86px);
+  --card-hero: clamp(82px, 21vmin, 112px);
+}
+@media (min-width: 560px) {
+  :root {
+    --card-board: clamp(46px, 9.2vh, 82px);
+    --card-hero: clamp(78px, 13.5vh, 108px);
+  }
+}
+#table-rail { filter: none; }
+#dealer { z-index: 7; }
+#dealer .dl-frame { box-shadow: 0 0 0 1px rgba(0,0,0,.7), 0 0 22px rgba(0,245,255,.55), 0 0 44px rgba(255,43,214,.32), 0 9px 22px rgba(0,0,0,.7); }
+#pot { top: 30%; z-index: 9; }
+#board { top: 64%; z-index: 9; }
+.street-banner { top: 46%; z-index: 10; }
+#hero-cards { margin-top: -10px; }
+#hero-panel { padding-top: 2px; }
+
+/* 보드 카드 사이 간격/가독성 */
+#board { gap: 6px; }
+.board-slot .card .card-body { box-shadow: 0 0 0 1.5px rgba(220,252,255,.95), 0 0 16px rgba(0,245,255,.45), 0 8px 18px rgba(0,0,0,.7); }
+.board-slot .card .corner b { font-size: .28em; }
+#hero-cards .card .card-body { box-shadow: 0 0 0 1.5px rgba(200,250,255,.9), 0 0 18px rgba(0,245,255,.35), 0 8px 20px rgba(0,0,0,.6); }
+
+/* 상단바가 좁은 화면에서 넘치지 않게 */
+.topbar { gap: 6px; }
+@media (max-width: 560px) {
+  .jackpot-box { display: none; }
+  .chips-pill { display: none; }
+  .table-meta b { font-size: 11.5px; }
+  .store-btn { padding: 2px 6px; }
+  .top-actions { gap: 4px; }
+  .icon-btn { width: 32px; height: 32px; border-radius: 9px; font-size: 15px; }
+  .icon-btn.wide { width: 38px; font-size: 11px; }
+}
+@media (max-width: 400px) {
+  .store-btn span { font-size: 11px; }
+  .store-btn { font-size: 6px; padding: 2px 5px; }
+  .table-meta b { font-size: 10.5px; }
+  .table-meta span { font-size: 9px; }
+}
+/* v7.3 — 위젯/좌석 겹침 정리 */
+.hud-w { width: 108px; }
+.hud-sidequest, .hud-daily { left: 4px; }
+.hud-challenge { left: 4px; }
+.hud-highroller { right: 4px; }
+.hud-combo { right: 6px; }
+@media (max-width: 620px) {
+  .hud-w { width: 94px; }
+  .hud-sidequest { display: none; }
+}
+/* v7.4 — 번개는 테이블 위·카드 뒤 (카드 앞면을 가리지 않음) */
+#bolt-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
+#table-rail { z-index: 2; }
+#board, #pot { z-index: 9; }
+#seats { z-index: 6; }
+#dealer { z-index: 7; }
+#hero-panel { z-index: 4; }
+/* v7.5 — POT은 보드 카드 위쪽 빈 공간에 (겹침 0) */
+#pot { top: 25%; }
+#board { top: 66%; }
+/* v7.6 — POT을 테이블 레이어 최상단(딜러/보드 위)으로, 보드 카드와 겹침 0 */
+#pot { top: 23%; z-index: 10; }
+/* v7.7 — 히어로 카드를 테이블 림에 살짝 걸치게 */
+#hero-panel { margin-top: -24px; }
+/* 대기 중에도 아케이드 버튼 4개는 보이게(비활성) — 시안과 동일한 하단 구성 */
+#action-bar.waiting .raise-row { display: flex; opacity: .55; pointer-events: none; }
+#action-bar.waiting .btn-row { display: flex; opacity: .6; pointer-events: none; }
+#pot { top: 26%; }
+/* v7.8 — 커뮤니티 카드 한 단계 더 크게 */
+@media (min-width: 560px) { :root { --card-board: clamp(48px, 10.2vh, 80px); } }

@@ -319,12 +319,18 @@
   <section id="screen-game" class="screen">
     <header class="topbar">
       <button id="btn-leave" class="icon-btn" type="button" aria-label="나가기">‹</button>
+      <div class="jackpot-box">
+        <span>JACKPOT</span>
+        <b id="jp-value">0</b>
+      </div>
       <div class="table-meta">
         <b id="g-room">뉴비방</b>
         <span id="g-blinds">10 / 20</span>
       </div>
       <div class="top-actions">
         <span id="g-rank" class="rank-chip"></span>
+        <div class="chips-pill"><span>🪙</span><b id="g-chips">0</b><button id="btn-charge-top" type="button">+</button></div>
+        <button id="btn-store-top" class="store-btn" type="button"><span>🎁</span>STORE</button>
         <button id="btn-gm" class="icon-btn wide gm" type="button" aria-label="운영자">GM</button>
         <button id="btn-sound" class="icon-btn" type="button" aria-label="소리">🔊</button>
         <button id="btn-speed" class="icon-btn wide" type="button">1×</button>
@@ -333,17 +339,50 @@
     </header>
 
     <div id="table-area" data-felt="emerald">
+      <div class="casino-room" aria-hidden="true">
+        <div class="cr-bokeh b1"></div><div class="cr-bokeh b2"></div><div class="cr-bokeh b3"></div>
+        <div class="cr-bokeh b4"></div><div class="cr-bokeh b5"></div><div class="cr-bokeh b6"></div>
+        <div class="cr-sign spade">♠</div>
+        <div class="cr-sign heart">♥</div>
+        <div class="cr-sign diamond">♦</div>
+        <div class="cr-lights"></div>
+        <div class="cr-floor"></div>
+      </div>
+
+      <div class="hud-widgets">
+        <button class="hud-w hud-challenge" id="hud-challenge" type="button">
+          <b>ROYAL FLUSH</b><i>CHALLENGE</i>
+          <span class="hud-cards">10 J Q K A</span>
+          <span class="hud-bar"><i id="hud-rf-fill"></i></span>
+        </button>
+        <button class="hud-w hud-highroller" id="hud-highroller" type="button">
+          <b>HIGH ROLLER</b><i>Bet 100K+</i>
+          <span class="hud-timer" id="hud-hr-time">02:15:30</span>
+        </button>
+        <button class="hud-w hud-sidequest" id="hud-sidequest" type="button">
+          <b>SIDE QUEST</b><i>족보 9종 수집</i>
+          <span class="hud-count" id="hud-quest-count">0 / 9</span>
+        </button>
+        <button class="hud-w hud-daily" id="hud-daily" type="button">
+          <b>DAILY BONUS</b><i>출석 보상</i>
+          <span class="hud-timer" id="hud-daily-time">받기</span>
+        </button>
+        <button class="hud-combo" id="hud-combo" type="button">
+          <b>COMBO!</b><span id="hud-combo-x">x2</span>
+        </button>
+      </div>
       <div id="table-rail">
         <div id="table-felt">
           <div class="felt-inner">
             <div class="felt-logo"><span>REAL HOLDEM</span><i>NO LIMIT TEXAS HOLD'EM</i></div>
             <div id="board"></div>
-            <div id="pot"></div>
           </div>
           <div class="rail-stitch"></div>
         </div>
       </div>
+      <div id="pot"></div>
       <div id="seats" class="seats"></div>
+      <canvas id="bolt-canvas"></canvas>
       <div id="dealer" class="dealer">
         <div class="dl-frame">
           <div class="dl-pic" id="dealer-pic"></div>
@@ -386,14 +425,17 @@
           <button data-q="max" type="button">올인</button>
         </div>
         <div class="slider-row">
+          <button id="raise-minus" class="step-btn" type="button" aria-label="베팅 줄이기">−</button>
           <input type="range" id="raise-slider" min="0" max="100" value="0">
+          <button id="raise-plus" class="step-btn" type="button" aria-label="베팅 늘리기">+</button>
           <output id="raise-val">0</output>
         </div>
       </div>
       <div class="btn-row">
-        <button id="btn-fold" class="act fold" type="button">폴드</button>
-        <button id="btn-call" class="act call" type="button">체크</button>
-        <button id="btn-raise" class="act raise" type="button">레이즈</button>
+        <button id="btn-fold" class="act fold" type="button">FOLD</button>
+        <button id="btn-check" class="act check" type="button">CHECK</button>
+        <button id="btn-call" class="act call" type="button">CALL</button>
+        <button id="btn-raise" class="act raise" type="button">RAISE</button>
       </div>
       <div id="pre-row" class="pre-row">
         <button id="pre-check" class="pre-btn pre-check" type="button"><span class="pb-lbl">미리 체크 / 폴드</span></button>
@@ -405,7 +447,6 @@
       </div>
     </div>
 
-    <canvas id="bolt-canvas"></canvas>
     <div id="impact-layer"></div>
     <canvas id="fx-canvas"></canvas>
     <div id="fx-layer"></div>
@@ -654,6 +695,22 @@
       <button class="btn-line close-modal" type="button">닫기</button>
       <button id="pass-premium" class="btn-gold" type="button">프리미엄 해금 11,000원</button>
     </div>
+  </div>
+</div>
+
+<div id="modal-store" class="modal">
+  <div class="modal-card">
+    <div class="mp-lobby-head">
+      <h3>🎁 NEON STORE</h3>
+      <button class="close-modal icon-btn" type="button">✕</button>
+    </div>
+    <div class="store-grid">
+      <button id="store-charge" class="store-item" type="button"><span class="si-ico">💳</span><b>칩 충전</b><i>1,100~55,000원</i></button>
+      <button id="store-pass" class="store-item" type="button"><span class="si-ico">🎫</span><b>시즌패스</b><i>무료/프리미엄</i></button>
+      <button id="store-collection" class="store-item" type="button"><span class="si-ico">📚</span><b>컬렉션</b><i>도감 보상</i></button>
+      <button id="store-skins" class="store-item" type="button"><span class="si-ico">🎨</span><b>스킨 상점</b><i>림·카드·프로필</i></button>
+    </div>
+    <button class="btn-line close-modal" type="button">닫기</button>
   </div>
 </div>
 

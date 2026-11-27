@@ -9,9 +9,9 @@
   'use strict';
 
   const LEVELS = {
-    1: { colors: ['#00f5ff', '#8ef9ff', '#b06bff'], width: 2.1, branches: 2, life: 520, glow: 14 },
-    2: { colors: ['#00f5ff', '#c86bff', '#ff2bd6'], width: 3.3, branches: 3, life: 680, glow: 20 },
-    3: { colors: ['#ffffff', '#bdf9ff', '#00f5ff', '#ff2bd6'], width: 4.6, branches: 5, life: 950, glow: 28 }
+    1: { colors: ['#00f5ff', '#8ef9ff', '#b06bff'], width: 1.25, branches: 2, life: 460, glow: 14 },
+    2: { colors: ['#00f5ff', '#c86bff', '#ff2bd6'], width: 1.65, branches: 3, life: 600, glow: 19 },
+    3: { colors: ['#ffffff', '#bdf9ff', '#00f5ff', '#ff2bd6'], width: 2.0, branches: 6, life: 780, glow: 24 }
   };
 
   /* 번개 이펙트 스킨 — 상점에서 장착 */
@@ -82,12 +82,11 @@
     resize() {
       if (!this.canvas) return;
       this.dpr = Math.min(2.5, global.devicePixelRatio || 1);
-      const w = global.innerWidth, h = global.innerHeight;
+      const w = this.canvas.clientWidth || global.innerWidth;
+      const h = this.canvas.clientHeight || global.innerHeight;
       this.W = w; this.H = h;
       this.canvas.width = Math.floor(w * this.dpr);
       this.canvas.height = Math.floor(h * this.dpr);
-      this.canvas.style.width = w + 'px';
-      this.canvas.style.height = h + 'px';
       this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     },
 
@@ -123,28 +122,36 @@
       const lv = Math.max(1, Math.min(3, level || 1));
       const cfg = Object.assign({}, LEVELS[lv], { colors: this.colorsFor(lv) });
       const W = this.W || global.innerWidth, H = this.H || global.innerHeight;
-      const t = target || { x: W / 2 - 20, y: H * 0.42, w: 40, h: 56 };
+      const box = this.canvas ? this.canvas.getBoundingClientRect() : { left: 0, top: 0 };
+      const t0 = target || { x: W / 2 - 20, y: H * 0.42, w: 40, h: 56 };
+      /* 캔버스는 테이블 영역 안에 있으므로 좌표를 로컬로 변환 */
+      const t = { x: t0.x - box.left, y: t0.y - box.top, w: t0.w, h: t0.h };
       const cx = t.x + t.w / 2, cy = t.y + t.h / 2;
 
       if (lv === 1) {
-        /* 플랍: 카드 좌우에서 모여드는 짧은 아크 + 위쪽 가로 스파크 */
-        this.addBolt(cx - t.w * 3.0, cy - t.h * 0.45, cx - t.w * 0.36, cy, cfg, 3, false);
-        this.addBolt(cx + t.w * 3.0, cy - t.h * 0.3, cx + t.w * 0.36, cy, cfg, 3, false);
-        this.addBolt(cx - t.w * 1.5, cy - t.h * 0.95, cx + t.w * 1.5, cy - t.h * 0.7, cfg, 2, false);
+        /* 플랍: 새 카드 테두리를 감싸며 튀는 가는 스파크 + 짧은 분기 전류 */
+        this.addBolt(cx - t.w * 0.55, cy - t.h * 0.58, cx - t.w * 0.52, cy + t.h * 0.55, cfg, 2, false);
+        this.addBolt(cx + t.w * 0.55, cy - t.h * 0.55, cx + t.w * 0.5, cy + t.h * 0.58, cfg, 2, false);
+        this.addBolt(cx - t.w * 0.7, cy - t.h * 0.2, cx - t.w * 0.45, cy - t.h * 0.66, cfg, 2, false);
+        this.addBolt(cx + t.w * 0.7, cy + t.h * 0.15, cx + t.w * 0.45, cy + t.h * 0.6, cfg, 2, false);
       } else if (lv === 2) {
-        /* 턴: 테이블 위에서 카드로 내리꽂히는 굵은 아크 + 양옆·아래 방전 */
-        this.addBolt(cx + rnd(-14, 14), Math.max(2, t.y - 250), cx, cy - t.h * 0.12, cfg, 3, true);
-        this.addBolt(cx - t.w * 3.6, cy - 44, cx - t.w * 0.32, cy, cfg, 3, false);
-        this.addBolt(cx + t.w * 3.6, cy - 30, cx + t.w * 0.32, cy, cfg, 3, false);
-        this.addBolt(cx - t.w * 1.8, cy + t.h * 0.55, cx + t.w * 1.8, cy + t.h * 0.42, cfg, 2, false);
+        /* 턴: 림 좌우에서 4번째 카드로 꽂히는 날카로운 듀얼 아크 + 카드 오라 */
+        this.addBolt(-30, cy - t.h * 0.6, cx - t.w * 0.3, cy - t.h * 0.05, cfg, 3, true);
+        this.addBolt(W + 30, cy - t.h * 0.45, cx + t.w * 0.3, cy - t.h * 0.02, cfg, 3, true);
+        this.addBolt(cx + rnd(-8, 8), Math.max(2, t.y - 170), cx, cy - t.h * 0.2, cfg, 3, false);
+        this.addBolt(cx - t.w * 0.75, cy + t.h * 0.5, cx - t.w * 0.35, cy + t.h * 0.15, cfg, 2, false);
       } else {
-        /* 리버: 화면을 가르는 대형 다중 분기 방전 */
-        this.addBolt(-24, cy - rnd(24, 96), W + 24, cy + rnd(-56, 56), cfg, 5, true);
-        this.addBolt(cx + rnd(-30, 30), -12, cx + rnd(-46, 46), cy, cfg, 4, true);
-        this.addBolt(cx - W * 0.56, cy - H * 0.42, cx + rnd(-20, 20), cy - t.h * 0.1, cfg, 4, true);
-        this.addBolt(cx + W * 0.56, cy - H * 0.3, cx + rnd(-20, 20), cy - t.h * 0.1, cfg, 4, true);
-        this.addBolt(cx - W * 0.3, H, cx + rnd(-20, 20), cy + t.h * 0.3, cfg, 3, false);
-        this.addBolt(cx + W * 0.3, H, cx + rnd(-20, 20), cy + t.h * 0.3, cfg, 3, false);
+        /* 리버: 카드를 가리지 않게 위·좌우에서 감싸며 터지는 다중 분기 */
+        this.addBolt(cx - W * 0.42, cy - t.h * 1.1, cx - t.w * 0.2, cy - t.h * 0.55, cfg, 3, true);
+        this.addBolt(cx + W * 0.42, cy - t.h * 0.95, cx + t.w * 0.2, cy - t.h * 0.55, cfg, 3, true);
+        this.addBolt(cx + rnd(-14, 14), Math.max(2, t.y - 200), cx, cy - t.h * 0.55, cfg, 3, true);
+        this.addBolt(-30, cy + t.h * 0.5, cx - t.w * 0.45, cy + t.h * 0.1, cfg, 2, false);
+        this.addBolt(W + 30, cy + t.h * 0.35, cx + t.w * 0.45, cy + t.h * 0.05, cfg, 2, false);
+        this.addBolt(cx - W * 0.18, cy - t.h * 1.5, cx - W * 0.2, cy - t.h * 0.95, cfg, 2, false);
+        this.addBolt(cx + W * 0.2, cy - t.h * 1.45, cx + W * 0.22, cy - t.h * 0.95, cfg, 2, false);
+        this.addBolt(-40, cy - t.h * 0.15, cx - t.w * 0.6, cy - t.h * 0.2, cfg, 3, true);
+        this.addBolt(W + 40, cy - t.h * 0.05, cx + t.w * 0.6, cy - t.h * 0.15, cfg, 3, true);
+        this.addBolt(cx - W * 0.3, cy + t.h * 1.25, cx - W * 0.34, cy + t.h * 0.5, cfg, 2, false);
       }
 
       this.flash(lv);
@@ -190,14 +197,14 @@
         }
         /* 임팩트 지점 글로우 */
         const end = b.pts[b.pts.length - 1];
-        const g = ctx.createRadialGradient(end[0], end[1], 0, end[0], end[1], 54);
-        g.addColorStop(0, 'rgba(255,255,255,' + (0.55 * alpha).toFixed(3) + ')');
-        g.addColorStop(0.35, 'rgba(120,245,255,' + (0.32 * alpha).toFixed(3) + ')');
+        const g = ctx.createRadialGradient(end[0], end[1], 0, end[0], end[1], 26);
+        g.addColorStop(0, 'rgba(255,255,255,' + (0.4 * alpha).toFixed(3) + ')');
+        g.addColorStop(0.4, 'rgba(120,245,255,' + (0.22 * alpha).toFixed(3) + ')');
         g.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.globalCompositeOperation = 'lighter';
         ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.arc(end[0], end[1], 54, 0, Math.PI * 2);
+        ctx.arc(end[0], end[1], 26, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -220,10 +227,10 @@
 
       /* 1) 바깥 네온 글로우 */
       ctx.strokeStyle = color;
-      ctx.lineWidth = width * 2.6;
+      ctx.lineWidth = width * 2.1;
       ctx.shadowColor = color;
-      ctx.shadowBlur = glow * 1.9;
-      ctx.globalAlpha = alpha * 0.34;
+      ctx.shadowBlur = glow * 2.1;
+      ctx.globalAlpha = alpha * 0.36;
       this.trace(ctx, pts, j * 1.7);
       ctx.stroke();
 
@@ -234,13 +241,13 @@
       this.trace(ctx, pts, j);
       ctx.stroke();
 
-      /* 3) 흰 코어 */
+      /* 3) 흰 코어 (얇게) */
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = Math.max(0.8, width * 0.38);
+      ctx.lineWidth = Math.max(0.5, width * 0.24);
       ctx.shadowColor = '#ffffff';
-      ctx.shadowBlur = glow * 0.55;
-      ctx.globalAlpha = alpha * 0.92;
-      this.trace(ctx, pts, j * 0.6);
+      ctx.shadowBlur = glow * 0.4;
+      ctx.globalAlpha = alpha * 0.45;
+      this.trace(ctx, pts, j * 0.55);
       ctx.stroke();
       ctx.restore();
     },

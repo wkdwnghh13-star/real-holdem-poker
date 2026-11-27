@@ -376,6 +376,23 @@
       $('#btn-speed').addEventListener('click', function () { self.toggleSpeed(); });
       $('#btn-fold').addEventListener('click', function () { self.heroAction('fold'); });
       $('#btn-call').addEventListener('click', function () { self.heroAction(self.options && self.options.toCall > 0 ? 'call' : 'check'); });
+      $('#btn-check').addEventListener('click', function () { self.heroAction('check'); });
+      $('#raise-minus').addEventListener('click', function () { self.nudgeRaise(-1); });
+      $('#raise-plus').addEventListener('click', function () { self.nudgeRaise(1); });
+      $('#btn-charge-top').addEventListener('click', function () { self.openStore(); });
+      $('#btn-store-top').addEventListener('click', function () { self.openStore(); });
+      $('#store-charge').addEventListener('click', function () { $('#modal-store').classList.remove('on'); self.openCharge('chip_1100'); });
+      $('#store-pass').addEventListener('click', function () { $('#modal-store').classList.remove('on'); self.openPass(); });
+      $('#store-collection').addEventListener('click', function () { $('#modal-store').classList.remove('on'); self.openCollection(); });
+      $('#store-skins').addEventListener('click', function () {
+        $('#modal-store').classList.remove('on');
+        self.toast('로비 → 스킨 · 칭호 탭에서 장착할 수 있어');
+      });
+      $('#hud-challenge').addEventListener('click', function () { self.openCollection('hands'); });
+      $('#hud-highroller').addEventListener('click', function () { self.openRanked(); });
+      $('#hud-sidequest').addEventListener('click', function () { self.openCollection('dealers'); });
+      $('#hud-daily').addEventListener('click', function () { self.claimDaily(); });
+      $('#hud-combo').addEventListener('click', function () { self.openPass(); });
       $('#btn-raise').addEventListener('click', function () { self.heroAction('raise'); });
       $('#pre-check').addEventListener('click', function () { self.setPreAction('check'); });
       $('#pre-call').addEventListener('click', function () { self.setPreAction('call'); });
@@ -628,6 +645,7 @@
       this.renderCharge();
       this.renderTournamentCard();
       this.renderCfg();
+      this.updateHud();
       View.setSkins(d.card, d.felt, d.rim, d.fx, d.cardFace, d.drop);
     },
 
@@ -1075,7 +1093,8 @@
     },
 
     /* ---------------------------------------------------------- 컬렉션 도감 */
-    openCollection() {
+    openCollection(tab) {
+      if (tab) this._collTab = tab;
       this._collTab = this._collTab || 'skins';
       $$('.coll-tab').forEach(function (b) { b.classList.toggle('active', b.dataset.coll === App._collTab); });
       this.renderCollection(this._collTab);
@@ -1146,6 +1165,53 @@
       this.renderLobby();
     },
 
+    /* ---------------------------------------------------------- 상단 HUD */
+    openStore() {
+      $('#modal-store').classList.add('on');
+      Sound.tap();
+    },
+
+    nudgeRaise(dir) {
+      const o = this.options;
+      const slider = $('#raise-slider');
+      if (!o || !slider) return;
+      const step = Math.max(1, this.engine ? this.engine.bb : 20);
+      let v = +slider.value + dir * step;
+      v = Math.max(o.minTo, Math.min(o.maxTo, v));
+      slider.value = v;
+      slider.style.setProperty('--fill', ((v - slider.min) / Math.max(1, slider.max - slider.min) * 100) + '%');
+      $('#raise-val').textContent = C.fmt(v);
+      this.updateRaiseLabel();
+      Sound.tap();
+    },
+
+    claimDaily() {
+      const r = Pr.claimDaily();
+      if (!r.ok) { this.toast(r.msg); return; }
+      Sound.chip(0, 6);
+      Sound.fanfare(0.05);
+      global.FX.coinShower(innerWidth / 2, innerHeight * 0.35, innerWidth * 0.7, 30);
+      this.toast('출석 보너스 +' + C.fmt(r.amount) + ' 칩!');
+      this.updateHud();
+      this.renderLobby();
+    },
+
+    updateHud() {
+      const jp = $('#jp-value');
+      if (jp) jp.textContent = C.fmt(Pr.data.bankroll);
+      const gc = $('#g-chips');
+      if (gc) gc.textContent = C.fmt(Pr.data.bankroll);
+      const cats = (Pr.data.catsSeen || []).length;
+      const q = $('#hud-quest-count');
+      if (q) q.textContent = cats + ' / 9';
+      const rf = $('#hud-rf-fill');
+      if (rf) rf.style.width = ((Pr.data.catsSeen || []).indexOf(8) >= 0 ? 100 : Math.round(cats / 9 * 100)) + '%';
+      const daily = $('#hud-daily-time');
+      if (daily) daily.textContent = Pr.dailyAvailable() ? '받기' : '완료';
+      const combo = $('#hud-combo-x');
+      if (combo) combo.textContent = 'x' + Math.min(5, 2 + Math.floor((Pr.data.lp || 0) / 400));
+    },
+
     /* ---------------------------------------------------------- 인게임 부스터 */
     renderBoosters() {
       const host = $('#shop-boosters');
@@ -1189,6 +1255,9 @@
       d.disabled = nd <= 0 && !this.boostDouble;
       b.disabled = nb <= 0;
       const inGame = !!this.engine && this.mode !== 'tutorial';
+      const anyBoost = nd + nb + nr > 0 || this.boostDouble || this.riskActive;
+      const row = $('#boost-row');
+      if (row) row.style.display = (inGame && anyBoost) ? 'flex' : 'none';
       d.style.display = inGame ? '' : 'none';
       b.style.display = inGame ? '' : 'none';
       if (r) {
@@ -1980,6 +2049,7 @@
       View.render(snap);
       if (meta && meta.action) View.fxAction(snap, meta);
       if (meta && meta.action === 'allin' && meta.actionSeat === 0) Pr.addPassXP(15);
+      this.updateHud();
       this.updateActionBar(snap);
       $('#g-blinds').textContent = this.engine.sb + ' / ' + this.engine.bb;
       if (this.mode === 'tournament') {
@@ -2034,11 +2104,13 @@
       if (!this.turnTimerId) this.startTurnTimer(this.runner ? this.runner.turnSeconds : 30);
       const o = snap.options;
       const call = $('#btn-call');
-      call.textContent = o.toCall > 0 ? '콜 ' + C.fmt(o.toCall) : '체크';
+      call.textContent = o.toCall > 0 ? 'CALL ' + C.fmt(o.toCall) : 'CALL';
       call.dataset.mode = o.toCall > 0 ? 'call' : 'check';
       const dis = !!you.allIn;
       $('#btn-fold').disabled = dis;
       call.disabled = dis;
+      const chk = $('#btn-check');
+      if (chk) chk.disabled = dis || o.toCall > 0;
       const raiseBtn = $('#btn-raise');
       raiseBtn.disabled = !o.canRaise;
       const slider = $('#raise-slider');
@@ -2052,6 +2124,7 @@
       const disabled = !o.canRaise;
       $$('#action-bar .quick button').forEach(function (b) { b.disabled = disabled; });
       this.refreshBoostUI();
+      this.updateHud();
     },
 
     updateRaiseLabel() {
@@ -2059,9 +2132,9 @@
       if (!o) return;
       const v = +$('#raise-slider').value;
       const btn = $('#btn-raise');
-      if (!o.canRaise) { btn.textContent = '레이즈 불가'; return; }
+      if (!o.canRaise) { btn.textContent = 'RAISE —'; return; }
       const isBet = o.currentBet === 0;
-      btn.textContent = (isBet ? '벳 ' : '레이즈 ') + C.fmt(v);
+      btn.textContent = (isBet ? 'BET ' : 'RAISE ') + C.fmt(v);
     },
 
     quickSize(kind) {

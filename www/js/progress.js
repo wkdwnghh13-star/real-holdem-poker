@@ -21,7 +21,7 @@
     boosters: { double: 0, blind: 0, risk: 0 },
     passXP: 0, passPremium: false, passClaimed: [],
     ownedWins: ['win_neon'], ownedLoses: ['lose_glitch'], winFx: 'win_neon', loseFx: 'lose_glitch',
-    dealersMet: [], catsSeen: [], collectionClaims: [],
+    dealersMet: [], catsSeen: [], collectionClaims: [], lastDaily: null,
     title: null,
     sound: true, speed: 'normal',
     haptics: true, bgmStyle: 'lofi',
@@ -313,8 +313,22 @@
       const pct = Math.round((ownedSkins / Math.max(1, totalSkins) * 40) + (dealers / 10 * 30) + (cats / 9 * 30));
       return { owns: owns, ownedSkins: ownedSkins, totalSkins: totalSkins, dealers: dealers, cats: cats, pct: Math.min(100, pct) };
     },
-    claimCollection(kind) {
-      const d = this.data;
+    /* ---------------------------------------------------- 일일 출석 보너스 */
+    dailyAvailable() {
+      const today = new Date().toISOString().slice(0, 10);
+      return this.data.lastDaily !== today;
+    },
+    claimDaily() {
+      if (!this.dailyAvailable()) return { ok: false, msg: '오늘은 이미 받았어' };
+      const today = new Date().toISOString().slice(0, 10);
+      this.data.lastDaily = today;
+      this.data.bankroll += 10000;
+      if (this.data.bankroll > this.data.peak) this.data.peak = this.data.bankroll;
+      this.save();
+      return { ok: true, amount: 10000 };
+    },
+
+    claimCollection(kind) {      const d = this.data;
       const st = this.collectionStats();
       d.collectionClaims = d.collectionClaims || [];
       if (d.collectionClaims.indexOf(kind) >= 0) return { ok: false, msg: '이미 받았어' };
